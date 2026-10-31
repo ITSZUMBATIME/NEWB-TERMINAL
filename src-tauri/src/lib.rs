@@ -2,6 +2,7 @@
 // Its job: start a real shell (bash, zsh...) for each tab, pass the keys you type
 // into it, and pass everything the shell prints back to the window.
 
+mod fsinfo;
 mod sysinfo;
 
 use std::{
@@ -19,6 +20,7 @@ struct Session {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     child: Box<dyn Child + Send + Sync>,
+    pid: Option<u32>,
 }
 
 /// All running shells, looked up by tab id.
@@ -65,6 +67,7 @@ fn pty_spawn(
     }
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+    let pid = child.process_id();
     drop(pair.slave);
 
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
@@ -107,6 +110,7 @@ fn pty_spawn(
             master: pair.master,
             writer,
             child,
+            pid,
         },
     );
     Ok(())
@@ -151,6 +155,19 @@ fn pty_kill(state: State<AppState>, id: u32) -> Result<(), String> {
     Ok(())
 }
 
+/// The folder this tab's shell is currently in (so the file explorer can follow along).
+#[tauri::command]
+fn pty_cwd(state: State<AppState>, id: u32) -> Result<String, String> {
+    let sessions = state.sessions.lock().unwrap();
+    let pid = sessions
+        .get(&id)
+        .and_then(|s| s.pid)
+        .ok_or_else(|| "no such tab".to_string())?;
+    std::fs::read_link(format!("/proc/{pid}/cwd"))
+        .map(|p| p.to_string_lossy().into_owned())
+        .map_err(|e| e.to_string())
+}
+
 /// Quit the whole app (used when the last tab closes).
 #[tauri::command]
 fn quit_app(app: AppHandle) {
@@ -167,6 +184,9 @@ pub fn run() {
             pty_resize,
             pty_kill,
             quit_app,
+            pty_cwd,
+            fsinfo::list_dir,
+            fsinfo::home_dir,
             sysinfo::system_info
         ])
         .run(tauri::generate_context!())

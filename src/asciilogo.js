@@ -119,6 +119,16 @@ export class AsciiLogo {
     if (!this.reduced) this.timer = setInterval(() => this.frame(), 66);
   }
 
+  /** Stop animating (used while dragging, so nothing competes for the screen). */
+  pause() {
+    clearInterval(this.timer);
+    this.timer = null;
+  }
+
+  resume() {
+    if (this.style && !this.timer && !this.reduced) this.timer = setInterval(() => this.frame(), 66);
+  }
+
   async layout() {
     if (!this.style) return;
     const style = this.style;

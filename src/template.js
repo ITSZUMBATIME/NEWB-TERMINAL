@@ -164,7 +164,7 @@ export function handleTemplateKey(tab, data, io) {
 function scheduleRefresh(tab, t) {
   clearTimeout(t.timer);
   // Wait a moment so the shell has echoed what we sent before we look at the cursor.
-  t.timer = setTimeout(() => refresh(tab), 90);
+  t.timer = setTimeout(() => refresh(tab), 40);
 }
 
 /** Redraw the highlights from where the terminal's cursor actually is. */
@@ -208,4 +208,15 @@ export function refresh(tab) {
     }
     t.decos.push({ deco, marker });
   });
+}
+
+/**
+ * Put text (like a file path) into the blank you're on, then move to the next blank.
+ * Returns false if there is no fill-in session, so the caller can just type the text instead.
+ */
+export function fillBlank(tab, text, io) {
+  if (!tab.template) return false;
+  handleTemplateKey(tab, text, io); // same as typing it
+  handleTemplateKey(tab, "\t", io); // then on to the next blank (or finish after the last one)
+  return true;
 }

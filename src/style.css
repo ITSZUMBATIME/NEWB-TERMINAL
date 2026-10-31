@@ -74,7 +74,7 @@ html, body, #app {
 }
 #new-tab:hover { background: var(--tab); color: var(--text); }
 
-#panes { flex: 1; position: relative; min-height: 0; }
+#panes { flex: 1; position: relative; min-height: 0; min-width: 0; }
 .pane { position: absolute; inset: 0; overflow: hidden; display: none; }
 .pane.active { display: block; }
 /* The terminal sits inside a holder. While the logo/info header is showing, the holder is
@@ -269,7 +269,7 @@ html, body, #app {
   position: fixed;
   top: var(--bar-h);
   bottom: 0;
-  width: clamp(300px, 28vw, 420px);
+  width: clamp(330px, 30vw, 470px);
   z-index: 40;
   display: flex;
   flex-direction: column;
@@ -288,7 +288,7 @@ html, body, #app {
 .drawer-close { border: none; background: none; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px; }
 .drawer-close:hover { color: var(--text); }
 
-#discover-search {
+#discover-search, .panel-input {
   margin: 10px 12px 4px 12px;
   padding: 8px 10px;
   background: #14161a;
@@ -299,7 +299,7 @@ html, body, #app {
   font-size: 13px;
   outline: none;
 }
-#discover-search:focus { border-color: var(--accent); }
+#discover-search:focus, .panel-input:focus { border-color: var(--accent); }
 
 .drawer-body { flex: 1; overflow-y: auto; padding: 2px 12px 18px 12px; }
 .cat-name { margin: 14px 0 6px 0; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
@@ -347,9 +347,105 @@ kbd { padding: 1px 6px; font-family: "JetBrainsMono Nerd Font", "JetBrains Mono"
 .empty { padding: 8px 4px; font-size: 12px; line-height: 1.45; color: var(--muted); }
 
 /* Dragging */
-.drag-ghost { position: fixed; left: 0; top: 0; z-index: 200; padding: 6px 10px; pointer-events: none; background: #10243d; border: 1px solid var(--accent); border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5); }
+.drag-ghost { position: fixed; left: 0; top: 0; z-index: 200; will-change: transform; contain: layout paint; padding: 6px 10px; pointer-events: none; background: #10243d; border: 1px solid var(--accent); border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5); }
 .drag-ghost .cmd { margin: 0; }
-body.dragging, body.dragging * { cursor: grabbing !important; user-select: none !important; }
+body.dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+body.dragging .card, body.dragging .tn-leaf, body.dragging .fx-row { cursor: grabbing; }
+/* While dragging, drop the glow and animation so nothing competes with the drag. */
+body.dragging #logo-wrap { filter: none !important; animation: none !important; }
 #panes.drop-ready { outline: 2px dashed var(--accent); outline-offset: -4px; }
 .fav-drop { margin: 0 -6px; padding: 0 6px 6px 6px; border: 1px dashed transparent; border-radius: 8px; }
 .fav-drop.drop-ready { background: rgba(78, 161, 255, 0.08); border-color: var(--accent); }
+
+/* ---------- Workspace: explorer on the left, terminal on the right ---------- */
+#workspace { flex: 1; display: flex; min-height: 0; }
+
+#explorer {
+  display: none;
+  position: relative;
+  flex: none;
+  flex-direction: column;
+  width: var(--fx-w, 290px);
+  background: #0f1114;
+  border-right: 1px solid #000;
+  font-size: 13px;
+}
+#workspace.fx-open #explorer { display: flex; }
+
+.fx-head { display: flex; align-items: center; gap: 2px; padding: 6px; border-bottom: 1px solid #1d2128; }
+.fx-btn { flex: none; width: 26px; height: 26px; border: none; border-radius: 6px; background: none; color: var(--muted); font-size: 14px; cursor: pointer; }
+.fx-btn:hover { background: #1b1f26; color: var(--text); }
+.fx-btn.on { color: var(--accent); }
+.fx-btn:disabled { opacity: 0.35; cursor: default; background: none; }
+.fx-path { flex: 1; min-width: 0; padding: 0 6px; font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.fx-tree { flex: 1; overflow: auto; padding: 4px 0 14px 0; }
+.fx-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px 3px calc(6px + var(--d, 0) * 14px);
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.fx-row:hover { background: #171a1f; }
+.fx-row.sel { background: #1c2a3f; }
+.fx-row.hidden-file { opacity: 0.6; }
+.fx-row.link .fx-name { font-style: italic; }
+.fx-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.fx-cd { display: none; padding: 0 6px; border: 1px solid #2c313a; border-radius: 4px; background: #14161a; color: var(--accent); font: inherit; font-size: 10px; cursor: pointer; }
+.fx-row:hover .fx-cd { display: inline-block; }
+.fx-note { padding: 3px 8px 3px calc(28px + var(--d, 0) * 14px); font-size: 12px; font-style: italic; color: var(--muted); }
+
+.caret { flex: none; width: 10px; text-align: center; }
+.caret::before { content: "\25B8"; display: inline-block; font-size: 11px; color: var(--muted); transition: transform 0.12s; }
+.caret.none::before { content: ""; }
+.fx-row.open > .caret::before { transform: rotate(90deg); }
+
+.ico { flex: none; width: 15px; height: 15px; fill: none; stroke-width: 1.1; }
+.ico-folder { fill: #3a3320; stroke: #e0a63a; }
+.ico-file { stroke: #8b93a1; }
+
+.fx-resize { position: absolute; top: 0; right: -3px; bottom: 0; width: 6px; cursor: col-resize; z-index: 3; }
+.fx-resize:hover, body.resizing .fx-resize { background: rgba(78, 161, 255, 0.35); }
+body.resizing { cursor: col-resize; user-select: none; }
+
+/* ---------- Right panel: sub-menus, tree ---------- */
+.drawer.no-anim { transition: none; }
+
+.subtabs { display: flex; gap: 2px; padding: 6px 12px 0 12px; border-bottom: 1px solid #1d2128; }
+.subtab { margin-bottom: -1px; padding: 6px 12px; border: none; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.subtab:hover { color: var(--text); }
+.subtab.on { color: var(--text); border-bottom-color: var(--accent); }
+
+.panel { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.panel[hidden] { display: none; }
+.panel-input { margin: 10px 12px 4px 12px; padding: 8px 10px; background: #14161a; border: 1px solid #2c313a; border-radius: 6px; color: var(--text); font: inherit; font-size: 13px; outline: none; }
+
+.tree-tools { display: flex; gap: 14px; padding: 2px 14px 4px 14px; }
+.link-btn { padding: 0; border: none; background: none; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
+.link-btn:hover { color: var(--accent); }
+
+.tn-head { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 6px; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.tn-head:hover { background: #171a1f; }
+.tn-branch:not(.closed) > .tn-head .caret::before { transform: rotate(90deg); }
+.tn-branch.top > .tn-head .tn-name { font-size: 11.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; }
+.tn-branch:not(.top) > .tn-head .tn-name { font-size: 13px; font-weight: 600; }
+.tn-head .tn-name { flex: 1; }
+.tn-count { font-size: 11px; color: var(--muted); }
+.tn-kids { margin-left: 9px; padding-left: 8px; border-left: 1px solid #232830; }
+.tn-branch.closed > .tn-kids { display: none; }
+.filtering .tn-branch.closed > .tn-kids { display: block; }
+
+.tn-leaf { margin: 3px 0; padding: 6px 8px; background: #151820; border: 1px solid transparent; border-radius: 6px; cursor: grab; user-select: none; -webkit-user-select: none; }
+.tn-leaf:hover { background: #1b1f26; border-color: #2c313a; }
+.tn-line { display: flex; align-items: center; gap: 8px; }
+.tn-line .tn-name { flex: 1; font-size: 12.5px; font-weight: 600; }
+.tn-leaf .cmd { margin-top: 3px; }
+.tn-why { margin-top: 3px; font-size: 11.5px; line-height: 1.4; color: var(--muted); }
+.key-row .tn-why { margin: 0; flex: 1; }
+
+.tn-branch.fav-drop { margin: 0 0 4px 0; padding: 0; border: 1px dashed transparent; border-radius: 8px; }
+.tn-branch.fav-drop.drop-ready { background: rgba(78, 161, 255, 0.08); border-color: var(--accent); }

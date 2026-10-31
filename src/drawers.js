@@ -1,142 +1,333 @@
-// The two slide-over drawers:
-//   Discover (left):    browse commands by what you want to do, search in plain English.
-//   Cheat sheet (right): your favourites, the essentials, and handy keys.
+// The right-hand slide-over panel. It has two sub-menus:
+//   Cheat sheet: commands in branching groups, like folders in a file explorer
+//                (Update > Application updates > Update Flatpak apps ...), plus your favourites.
+//   Discover:    the plain-English "what do you want to do?" list, with search.
 // Commands can be dragged onto the terminal. Dropping types the command for you to check;
 // it never presses Enter. Dropping onto "Favourites" pins it.
 
-import { CATEGORIES, ESSENTIALS, KEYS, lookup } from "./commands.js";
+import { CATEGORIES, TREE, ESSENTIALS, KEYS, lookup, lookupTree } from "./commands.js";
+import { el, cmdElement } from "./ui.js";
 
 const FAV_KEY = "akin.favs.v1";
-const BLANK_SPLIT = /(\{\{[^}]+\}\})/;
+const OPEN_KEY = "akin.tree.v1";
+const TAB_KEY = "akin.rtab.v1";
+const FAV_ID = "Favourites";
 
-function loadFavs() {
+function load(key, fallback) {
   try {
-    const list = JSON.parse(localStorage.getItem(FAV_KEY) || "[]");
-    return Array.isArray(list) ? list.filter((x) => typeof x === "string") : [];
+    const v = JSON.parse(localStorage.getItem(key));
+    return v ?? fallback;
   } catch (_) {
-    return [];
+    return fallback;
   }
 }
-function saveFavs(list) {
-  try { localStorage.setItem(FAV_KEY, JSON.stringify(list)); } catch (_) { /* fine */ }
+function save(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) { /* fine */ }
 }
 
-/** A command as web text, with its blanks drawn as little pills. */
-function cmdElement(cmd) {
-  const code = document.createElement("code");
-  code.className = "cmd";
-  for (const part of cmd.split(BLANK_SPLIT)) {
-    if (!part) continue;
-    const m = /^\{\{([^}]+)\}\}$/.exec(part);
-    if (m) {
-      const pill = document.createElement("span");
-      pill.className = "blank";
-      pill.textContent = m[1].trim();
-      code.append(pill);
-    } else {
-      code.append(document.createTextNode(part));
-    }
-  }
-  return code;
-}
-
-function el(tag, className, text) {
-  const e = document.createElement(tag);
-  if (className) e.className = className;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
+const infoFor = (cmd) => lookupTree(cmd) || lookup(cmd);
 
 /**
- * options: { onInsert(cmd, risky), toast(msg), focusTerminal(), panesEl }
- * returns { toggle(which), close(which), closeAll() } where which is "discover" or "cheats"
+ * options: { onInsert(cmd, risky), toast(msg), focusTerminal(), panesEl, dragger }
+ * returns { toggle(), open(tab), close(), closeInstant(), isOpen() }
  */
-export function initDrawers({ onInsert, toast, focusTerminal, panesEl }) {
-  const drawers = {
-    discover: document.getElementById("drawer-discover"),
-    cheats: document.getElementById("drawer-cheats"),
-  };
-  const buttons = {
-    discover: document.getElementById("open-discover"),
-    cheats: document.getElementById("open-cheats"),
-  };
+export function initDrawers({ onInsert, toast, focusTerminal, panesEl, dragger }) {
+  const drawer = document.getElementById("drawer-cheats");
+  const button = document.getElementById("open-cheats");
+  const treeBody = document.getElementById("cheat-body");
+  const treeFilter = document.getElementById("tree-filter");
   const discoverList = document.getElementById("discover-list");
-  const cheatBody = document.getElementById("cheat-body");
   const search = document.getElementById("discover-search");
+  const subtabs = [...drawer.querySelectorAll(".subtab")];
+  const panels = { tree: document.getElementById("panel-tree"), discover: document.getElementById("panel-discover") };
 
-  let favs = loadFavs();
+  let favs = load(FAV_KEY, []).filter((x) => typeof x === "string");
+  let openIds = new Set(load(OPEN_KEY, [FAV_ID]));
+  let tab = load(TAB_KEY, "tree");
+  if (!panels[tab]) tab = "tree";
 
-  /* ---------- Opening and closing ---------- */
+  /* ---------- Opening, closing, sub-menus ---------- */
 
-  function isOpen(which) {
-    return drawers[which].classList.contains("open");
-  }
-  function open(which) {
-    drawers[which].classList.add("open");
-    drawers[which].setAttribute("aria-hidden", "false");
-    buttons[which].classList.add("active");
-    if (which === "discover") {
+  const isOpen = () => drawer.classList.contains("open");
+
+  function showTab(name, focus) {
+    tab = name;
+    save(TAB_KEY, name);
+    for (const b of subtabs) b.classList.toggle("on", b.dataset.tab === name);
+    for (const [k, p] of Object.entries(panels)) p.hidden = k !== name;
+    if (focus) {
+      const input = name === "discover" ? search : treeFilter;
       setTimeout(() => {
-        search.focus();
-        search.select(); // typing replaces whatever was searched last time
+        input.focus();
+        input.select();
       }, 120);
     }
   }
-  function close(which) {
-    const d = drawers[which];
-    if (!d.classList.contains("open")) return;
-    d.classList.remove("open");
-    d.setAttribute("aria-hidden", "true");
-    buttons[which].classList.remove("active");
-    if (d.contains(document.activeElement)) focusTerminal();
+
+  function open(name) {
+    drawer.classList.add("open");
+    drawer.setAttribute("aria-hidden", "false");
+    button.classList.add("active");
+    showTab(name || tab, true);
   }
-  function toggle(which) {
-    if (isOpen(which)) close(which);
-    else open(which);
+  function close() {
+    if (!isOpen()) return;
+    drawer.classList.remove("open");
+    drawer.setAttribute("aria-hidden", "true");
+    button.classList.remove("active");
+    if (drawer.contains(document.activeElement)) focusTerminal();
   }
-  function closeAll() {
-    close("discover");
-    close("cheats");
+  // Used while dragging out of the panel: no slide animation, so nothing lingers.
+  function closeInstant() {
+    drawer.classList.add("no-anim");
+    close();
+    requestAnimationFrame(() => requestAnimationFrame(() => drawer.classList.remove("no-anim")));
+  }
+  function toggle() {
+    if (isOpen()) close();
+    else open();
   }
 
-  buttons.discover.addEventListener("click", () => toggle("discover"));
-  buttons.cheats.addEventListener("click", () => toggle("cheats"));
-  for (const d of Object.values(drawers)) {
-    d.querySelector(".drawer-close").addEventListener("click", () => close(d.dataset.drawer));
-  }
+  button.addEventListener("click", toggle);
+  drawer.querySelector(".drawer-close").addEventListener("click", close);
+  for (const b of subtabs) b.addEventListener("click", () => showTab(b.dataset.tab, true));
 
   // Shortcuts when the keyboard is NOT in the terminal (the terminal has its own handler).
   window.addEventListener("keydown", (e) => {
     if (e.target.closest?.(".xterm")) return;
-    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "d") {
+    const k = e.key.toLowerCase();
+    if (e.ctrlKey && e.shiftKey && k === "s") {
       e.preventDefault();
-      toggle("discover");
-    } else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "s") {
+      toggle();
+    } else if (e.ctrlKey && e.shiftKey && k === "d") {
       e.preventDefault();
-      toggle("cheats");
-    } else if (e.key === "Escape" && Object.values(drawers).some((d) => d.contains(e.target))) {
-      closeAll();
+      open("discover");
+    } else if (e.key === "Escape" && drawer.contains(e.target)) {
+      close();
     }
   });
 
-  // Clicking in the terminal tucks the drawers away.
-  panesEl.addEventListener("pointerdown", () => closeAll());
+  // Clicking in the terminal tucks the panel away.
+  panesEl.addEventListener("pointerdown", close);
 
-  // Drawers start just under the tab bar, wherever that ends.
+  // The panel starts just under the tab bar, wherever that ends.
   const bar = document.getElementById("tabbar");
   new ResizeObserver(() => document.documentElement.style.setProperty("--bar-h", `${bar.offsetHeight}px`)).observe(bar);
 
-  /* ---------- Discover ---------- */
+  /* ---------- Favourites ---------- */
 
-  function isFav(cmd) {
-    return favs.includes(cmd);
+  const isFav = (cmd) => favs.includes(cmd);
+
+  function toggleFav(cmd) {
+    favs = isFav(cmd) ? favs.filter((c) => c !== cmd) : [...favs, cmd];
+    save(FAV_KEY, favs);
+    renderFavs();
+    refreshStars();
   }
+
+  function addFav(cmd) {
+    if (isFav(cmd)) {
+      toast("That one is already in your favourites.");
+      return;
+    }
+    toggleFav(cmd);
+    toast("Added to your favourites.");
+  }
+
+  function refreshStars() {
+    for (const star of drawer.querySelectorAll(".star")) {
+      const on = isFav(star.closest("[data-cmd]").dataset.cmd);
+      star.textContent = on ? "★" : "☆";
+      star.classList.toggle("on", on);
+    }
+  }
+
+  function starButton(cmd) {
+    const star = el("button", "star");
+    star.title = "Add to your favourites";
+    star.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleFav(cmd);
+    });
+    return star;
+  }
+
+  /* ---------- Cheat sheet tree ---------- */
+
+  function leaf(item, depth, { removable = false } = {}) {
+    const row = el("div", "tn-leaf");
+    row.dataset.cmd = item.cmd;
+    if (item.risky) row.dataset.risky = "1";
+    row.dataset.search = `${item.name || item.title || ""} ${item.cmd} ${item.why || ""} ${(item.trail || []).join(" ")}`.toLowerCase();
+    row.style.setProperty("--d", depth);
+
+    const line = el("div", "tn-line");
+    line.append(el("span", "tn-name", item.name || item.title || item.cmd));
+    if (item.risky) line.append(el("span", "tag", "careful"));
+    if (removable) {
+      const x = el("button", "unpin", "×");
+      x.title = "Remove from favourites";
+      x.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleFav(item.cmd);
+      });
+      line.append(x);
+    } else {
+      line.append(starButton(item.cmd));
+    }
+    row.append(line, cmdElement(item.cmd));
+    if (item.why) row.append(el("div", "tn-why", item.why));
+    return row;
+  }
+
+  function branch(id, name, depth, kidsBuilder, { count, extraClass } = {}) {
+    const wrap = el("div", `tn-branch${extraClass ? " " + extraClass : ""}`);
+    wrap.dataset.id = id;
+    wrap.style.setProperty("--d", depth);
+    const head = el("div", "tn-head");
+    head.append(el("span", "caret"), el("span", "tn-name", name));
+    if (count !== undefined) head.append(el("span", "tn-count", String(count)));
+    const kids = el("div", "tn-kids");
+    kidsBuilder(kids);
+    wrap.append(head, kids);
+    wrap.classList.toggle("closed", !openIds.has(id));
+    head.addEventListener("click", () => {
+      if (dragger.justDragged) return;
+      wrap.classList.toggle("closed");
+      if (wrap.classList.contains("closed")) openIds.delete(id);
+      else openIds.add(id);
+      save(OPEN_KEY, [...openIds]);
+    });
+    return wrap;
+  }
+
+  function groupNode(node, depth, trail) {
+    const id = [...trail, node.name].join(" > ");
+    const total = countLeaves(node);
+    return branch(id, node.name, depth, (kids) => {
+      for (const child of node.children) {
+        if (child.children) kids.append(groupNode(child, depth + 1, [...trail, node.name]));
+        else kids.append(leaf({ ...child, trail: [...trail, node.name] }, depth + 1));
+      }
+    }, { count: total });
+  }
+
+  function countLeaves(node) {
+    return node.children.reduce((n, ch) => n + (ch.children ? countLeaves(ch) : 1), 0);
+  }
+
+  function renderFavs() {
+    const node = treeBody.querySelector(`.tn-branch[data-id="${FAV_ID}"]`);
+    if (!node) return;
+    const kids = node.querySelector(".tn-kids");
+    kids.replaceChildren();
+    if (favs.length) {
+      for (const cmd of favs) {
+        const info = infoFor(cmd) || { name: cmd, cmd };
+        kids.append(leaf({ ...info, cmd }, 1, { removable: true }));
+      }
+    } else {
+      kids.append(el("div", "empty", "Star a command, or drag one here, to keep it handy."));
+    }
+    node.querySelector(".tn-count").textContent = String(favs.length);
+    applyFilter();
+  }
+
+  function renderTree() {
+    treeBody.replaceChildren();
+
+    treeBody.append(branch(FAV_ID, "★ Favourites", 0, () => {}, { count: favs.length, extraClass: "fav-drop top" }));
+    renderFavs();
+
+    treeBody.append(
+      branch("Essentials", "Essentials", 0, (kids) => {
+        for (const cmd of ESSENTIALS) {
+          const info = infoFor(cmd) || { name: cmd, cmd };
+          kids.append(leaf(info, 1));
+        }
+      }, { count: ESSENTIALS.length, extraClass: "top" }),
+    );
+
+    for (const group of TREE) {
+      const node = groupNode(group, 0, []);
+      node.classList.add("top");
+      treeBody.append(node);
+    }
+
+    treeBody.append(
+      branch("Handy keys", "Handy keys", 0, (kids) => {
+        for (const [k, what] of KEYS) {
+          const r = el("div", "key-row");
+          r.append(el("kbd", "", k), el("span", "tn-why", what));
+          kids.append(r);
+        }
+      }, { count: KEYS.length, extraClass: "top" }),
+    );
+
+    treeBody.append(el("div", "empty tree-none", "Nothing matches. Try different words, like \"update\", \"copy\" or \"git\"."));
+    treeBody.querySelector(".tree-none").hidden = true;
+    refreshStars();
+  }
+
+  // Filtering: show only matching commands, with the groups that hold them opened up.
+  function applyFilter() {
+    const words = treeFilter.value.toLowerCase().split(/\s+/).filter(Boolean);
+    treeBody.classList.toggle("filtering", words.length > 0);
+    let any = false;
+
+    const visit = (node) => {
+      let shown = 0;
+      for (const kid of node.querySelector(":scope > .tn-kids").children) {
+        if (kid.classList.contains("tn-leaf")) {
+          const hit = words.every((w) => kid.dataset.search.includes(w));
+          kid.hidden = !hit;
+          if (hit) shown++;
+        } else if (kid.classList.contains("tn-branch")) {
+          shown += visit(kid);
+        }
+      }
+      node.hidden = words.length > 0 && shown === 0;
+      return shown;
+    };
+
+    for (const top of treeBody.querySelectorAll(":scope > .tn-branch")) {
+      if (!words.length) {
+        top.hidden = false;
+        for (const x of top.querySelectorAll("[hidden]")) if (!x.classList.contains("tree-none")) x.hidden = false;
+        any = true;
+        continue;
+      }
+      // Skip the plain key list when filtering.
+      if (top.dataset.id === "Handy keys") {
+        top.hidden = true;
+        continue;
+      }
+      if (visit(top) > 0) any = true;
+    }
+    const none = treeBody.querySelector(".tree-none"); // not there yet while the tree is first being built
+    if (none) none.hidden = any || !words.length;
+  }
+  treeFilter.addEventListener("input", applyFilter);
+
+  document.getElementById("tree-expand").addEventListener("click", () => {
+    for (const b of treeBody.querySelectorAll(".tn-branch")) {
+      b.classList.remove("closed");
+      openIds.add(b.dataset.id);
+    }
+    save(OPEN_KEY, [...openIds]);
+  });
+  document.getElementById("tree-collapse").addEventListener("click", () => {
+    openIds = new Set([FAV_ID]);
+    for (const b of treeBody.querySelectorAll(".tn-branch")) b.classList.toggle("closed", !openIds.has(b.dataset.id));
+    save(OPEN_KEY, [...openIds]);
+  });
+
+  /* ---------- Discover ---------- */
 
   function renderDiscover() {
     discoverList.replaceChildren();
     for (const cat of CATEGORIES) {
       const sec = el("section", "cat");
-      sec.dataset.cat = cat.id;
       sec.append(el("h3", "cat-name", cat.name));
       for (const item of cat.items) {
         const card = el("div", "card");
@@ -147,18 +338,11 @@ export function initDrawers({ onInsert, toast, focusTerminal, panesEl }) {
         const top = el("div", "card-top");
         top.append(el("span", "card-title", item.title));
         if (item.risky) top.append(el("span", "tag", "careful"));
-        const star = el("button", "star", isFav(item.cmd) ? "★" : "☆");
-        star.title = "Add to your favourites";
-        star.classList.toggle("on", isFav(item.cmd));
-        star.addEventListener("click", (e) => {
-          e.stopPropagation();
-          toggleFav(item.cmd);
-        });
-        top.append(star);
+        top.append(starButton(item.cmd));
 
         card.append(top, cmdElement(item.cmd), el("div", "card-why", item.why));
         card.addEventListener("click", () => {
-          if (justDragged) return;
+          if (dragger.justDragged) return;
           card.classList.toggle("open");
         });
         sec.append(card);
@@ -188,163 +372,14 @@ export function initDrawers({ onInsert, toast, focusTerminal, panesEl }) {
   }
   search.addEventListener("input", applySearch);
 
-  /* ---------- Cheat sheet ---------- */
+  /* ---------- Go ---------- */
 
-  function sheetRow(cmd, { removable }) {
-    const info = lookup(cmd);
-    const row = el("div", "row");
-    row.dataset.cmd = cmd;
-    if (info?.risky) row.dataset.risky = "1";
-    row.append(cmdElement(cmd));
-    if (info) row.append(el("span", "row-title", info.title));
-    if (removable) {
-      const x = el("button", "unpin", "×");
-      x.title = "Remove from favourites";
-      x.addEventListener("click", (e) => {
-        e.stopPropagation();
-        toggleFav(cmd);
-      });
-      row.append(x);
-    }
-    return row;
-  }
-
-  function renderCheats() {
-    cheatBody.replaceChildren();
-
-    const favSec = el("section", "sheet-sec fav-drop");
-    favSec.append(el("h3", "cat-name", "Favourites"));
-    if (favs.length) {
-      for (const cmd of favs) favSec.append(sheetRow(cmd, { removable: true }));
-    } else {
-      favSec.append(el("div", "empty", "Star a command in Discover, or drag one here, to keep it handy."));
-    }
-    cheatBody.append(favSec);
-
-    const ess = el("section", "sheet-sec");
-    ess.append(el("h3", "cat-name", "Essentials"));
-    for (const cmd of ESSENTIALS) ess.append(sheetRow(cmd, { removable: false }));
-    cheatBody.append(ess);
-
-    const keys = el("section", "sheet-sec");
-    keys.append(el("h3", "cat-name", "Handy keys"));
-    for (const [k, what] of KEYS) {
-      const r = el("div", "key-row");
-      r.append(el("kbd", "", k), el("span", "row-title", what));
-      keys.append(r);
-    }
-    cheatBody.append(keys);
-  }
-
-  function toggleFav(cmd) {
-    favs = isFav(cmd) ? favs.filter((c) => c !== cmd) : [...favs, cmd];
-    saveFavs(favs);
-    renderCheats();
-    for (const card of discoverList.querySelectorAll(".card")) {
-      const on = isFav(card.dataset.cmd);
-      const star = card.querySelector(".star");
-      star.textContent = on ? "★" : "☆";
-      star.classList.toggle("on", on);
-    }
-  }
-
-  function addFav(cmd) {
-    if (isFav(cmd)) {
-      toast("That one is already in your favourites.");
-      return;
-    }
-    toggleFav(cmd);
-    toast("Added to your favourites.");
-  }
-
-  /* ---------- Drag and drop ---------- */
-
-  let drag = null;
-  let justDragged = false;
-
-  function targetAt(x, y) {
-    const hit = document.elementFromPoint(x, y);
-    if (!hit) return null;
-    if (hit.closest(".fav-drop")) return "fav";
-    if (hit.closest(".drawer") || hit.closest("#tabbar")) return null;
-    if (hit.closest("#panes")) return "terminal";
-    return null;
-  }
-
-  function endDrag() {
-    window.removeEventListener("pointermove", onMove);
-    window.removeEventListener("pointerup", onUp);
-    window.removeEventListener("keydown", onKey, true);
-    if (drag?.ghost) drag.ghost.remove();
-    document.body.classList.remove("dragging");
-    panesEl.classList.remove("drop-ready");
-    for (const f of document.querySelectorAll(".fav-drop")) f.classList.remove("drop-ready");
-    drag = null;
-  }
-
-  function onKey(e) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      endDrag();
-    }
-  }
-
-  function onMove(e) {
-    if (!drag) return;
-    if (!drag.active) {
-      if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return;
-      drag.active = true;
-      drag.ghost = el("div", "drag-ghost");
-      drag.ghost.append(cmdElement(drag.cmd));
-      document.body.append(drag.ghost);
-      document.body.classList.add("dragging");
-      // Lifting a command out of its drawer slides that drawer out of the way.
-      if (drag.from) close(drag.from.dataset.drawer);
-    }
-    drag.ghost.style.transform = `translate(${e.clientX + 14}px, ${e.clientY + 10}px)`;
-    const target = targetAt(e.clientX, e.clientY);
-    panesEl.classList.toggle("drop-ready", target === "terminal");
-    for (const f of document.querySelectorAll(".fav-drop")) f.classList.toggle("drop-ready", target === "fav");
-  }
-
-  function onUp(e) {
-    if (!drag) return;
-    const d = drag;
-    if (d.active) {
-      justDragged = true;
-      setTimeout(() => (justDragged = false), 0);
-      const target = targetAt(e.clientX, e.clientY);
-      endDrag();
-      if (target === "terminal") onInsert(d.cmd, d.risky);
-      else if (target === "fav") addFav(d.cmd);
-    } else {
-      endDrag();
-    }
-  }
-
-  function onDown(e) {
-    if (e.button !== 0 || e.target.closest("button")) return;
-    const source = e.target.closest("[data-cmd]");
-    if (!source) return;
-    drag = {
-      cmd: source.dataset.cmd,
-      risky: source.dataset.risky === "1",
-      from: source.closest(".drawer"),
-      x0: e.clientX,
-      y0: e.clientY,
-      active: false,
-      ghost: null,
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("keydown", onKey, true);
-  }
-  discoverList.addEventListener("pointerdown", onDown);
-  cheatBody.addEventListener("pointerdown", onDown);
+  dragger.attach(treeBody);
+  dragger.attach(discoverList);
 
   renderDiscover();
-  renderCheats();
+  renderTree();
+  showTab(tab, false);
 
-  return { toggle, close, closeAll };
+  return { toggle, open, close, closeInstant, isOpen, addFav };
 }

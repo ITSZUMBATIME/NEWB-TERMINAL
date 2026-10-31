@@ -12,7 +12,10 @@ import { THEME } from "./theme.js";
 import { buildModel, renderWeb } from "./info.js";
 import { printBanner } from "./banner.js";
 import { initDrawers } from "./drawers.js";
-import { parseSpec, startTemplate, handleTemplateKey, cancelTemplate, refresh as refreshTemplate } from "./template.js";
+import { initExplorer } from "./explorer.js";
+import { createDragger } from "./drag.js";
+import { shellPath } from "./ui.js";
+import { parseSpec, startTemplate, handleTemplateKey, cancelTemplate, fillBlank, refresh as refreshTemplate } from "./template.js";
 import { AsciiLogo, ASCII_STYLES } from "./asciilogo.js";
 
 const tabsEl = document.getElementById("tabs");
@@ -117,6 +120,8 @@ async function loadInfo() {
 /* ---------- Dropping commands into the terminal ---------- */
 
 let drawersApi = null;
+let explorerApi = null;
+let homeDir = "";
 
 const templateIO = (tab) => ({
   send: (text) => invoke("pty_write", { id: tab.id, data: text }),
@@ -131,6 +136,36 @@ function insertCommand(cmd, risky) {
   keepCursorInView(tab);
   tab.term.focus();
   if (risky) toast("Careful: this one can delete or change things. Check it, then press Enter.");
+}
+
+// Type plain text (like "cd ~/Projects") at the prompt. Never presses Enter.
+function typeText(text) {
+  const tab = activeTab();
+  if (!tab || !tab.opened) return;
+  startTemplate(tab, { text, blanks: [] }, templateIO(tab));
+  keepCursorInView(tab);
+  tab.term.focus();
+}
+
+// A file or folder dropped on the terminal: its path goes into the blank you're on,
+// or is typed at the prompt if you aren't filling in blanks.
+// The folder this tab's shell is in, so paths can be written the short way.
+async function cwdOf(tab) {
+  try {
+    return await invoke("pty_cwd", { id: tab.id });
+  } catch (_) {
+    return "";
+  }
+}
+
+async function insertPath(path) {
+  const tab = activeTab();
+  if (!tab || !tab.opened) return;
+  const text = shellPath(path, homeDir, await cwdOf(tab));
+  const io = templateIO(tab);
+  if (!fillBlank(tab, text, io)) io.send(text + " ");
+  keepCursorInView(tab);
+  tab.term.focus();
 }
 
 /* ---------- Scrolling header ----------
@@ -329,12 +364,17 @@ async function newTab() {
     }
     if (k === "d") {
       e.preventDefault();
-      drawersApi?.toggle("discover");
+      drawersApi?.open("discover");
       return false;
     }
     if (k === "s") {
       e.preventDefault();
-      drawersApi?.toggle("cheats");
+      drawersApi?.toggle();
+      return false;
+    }
+    if (k === "e") {
+      e.preventDefault();
+      explorerApi?.toggle();
       return false;
     }
     if (k === "i") {
@@ -393,11 +433,46 @@ async function start() {
   });
   await listen("pty-exit", (e) => closeTab(e.payload.id, true));
 
+  try { homeDir = await invoke("home_dir"); } catch (_) { /* paths just won't be shortened */ }
+
+  // One drag engine for both panels (commands and file paths).
+  const dragger = createDragger({
+    panesEl,
+    onDrop: (payload, target) => {
+      if (payload.kind === "cmd") {
+        if (target === "terminal") insertCommand(payload.cmd, payload.risky);
+        else if (target === "fav") drawersApi?.addFav(payload.cmd);
+      } else if (target === "terminal") {
+        insertPath(payload.path);
+      }
+    },
+    onStart: () => asciiLogo.pause(), // keep the screen quiet so the drag stays smooth
+    onEnd: () => asciiLogo.resume(),
+    onLeaveSource: () => drawersApi?.closeInstant(),
+  });
+
   drawersApi = initDrawers({
     onInsert: insertCommand,
     toast,
     focusTerminal: () => activeTab()?.term.focus(),
     panesEl,
+    dragger,
+  });
+  explorerApi = await initExplorer({
+    dragger,
+    getActiveTabId: () => activeId,
+    onCd: async (path) => {
+      const tab = activeTab();
+      if (tab) typeText(`cd ${shellPath(path, homeDir, await cwdOf(tab))}`);
+    },
+    toast,
+  });
+
+  // Clicking anywhere in the terminal area gives the terminal the keyboard (except on the info
+  // text, which you may want to select and copy).
+  panesEl.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("#info")) return;
+    setTimeout(() => activeTab()?.term.focus(), 0);
   });
 
   newTabBtn.addEventListener("click", newTab);

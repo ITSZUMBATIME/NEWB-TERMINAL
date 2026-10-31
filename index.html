@@ -8,12 +8,13 @@
   <body>
     <div id="app">
       <div id="tabbar">
-        <button id="open-discover" class="bar-btn" title="Discover commands (Ctrl+Shift+D)">&#9703; Discover</button>
+        <button id="open-files" class="bar-btn" title="Files (Ctrl+Shift+E)">&#9703; Files</button>
         <div id="tabs"></div>
         <button id="new-tab" title="New tab (Ctrl+Shift+T)">+</button>
         <button id="open-cheats" class="bar-btn" title="Cheat sheet (Ctrl+Shift+S)">Cheat sheet &#9704;</button>
         <button id="toggle-info" title="Change the system info layout (Ctrl+Shift+I)">&#9432;</button>
       </div>
+
       <div id="hero" data-logo="code" data-layout="pinned">
         <div id="logo-wrap">
           <div class="logo" role="img" aria-label="AKIN" title="Click to try another logo style"></div>
@@ -30,16 +31,45 @@
           </div>
         </div>
       </div>
-      <div id="panes"></div>
+
+      <div id="workspace">
+        <!-- Left: file explorer. Docked, so it pushes the terminal across. -->
+        <aside id="explorer" aria-label="Files" aria-hidden="false">
+          <div class="fx-head">
+            <button id="fx-home" class="fx-btn" title="Home folder">&#8962;</button>
+            <button id="fx-up" class="fx-btn" title="Up one folder">&#8593;</button>
+            <div id="fx-path" class="fx-path"></div>
+            <button id="fx-follow" class="fx-btn" title="Follow the folder the terminal is in">&#9678;</button>
+            <button id="fx-hidden" class="fx-btn" title="Show hidden files">&#9680;</button>
+            <button id="fx-refresh" class="fx-btn" title="Refresh">&#8635;</button>
+          </div>
+          <div id="fx-tree" class="fx-tree"></div>
+          <div id="fx-resize" class="fx-resize" title="Drag to resize"></div>
+        </aside>
+        <div id="panes"></div>
+      </div>
+
       <div id="logo-toast"></div>
-      <aside id="drawer-discover" class="drawer left" data-drawer="discover" aria-hidden="true" aria-label="Discover commands">
-        <header><h2>Discover</h2><button class="drawer-close" title="Close (Esc)">&times;</button></header>
-        <input id="discover-search" type="search" placeholder="What do you want to do? e.g. copy a file" autocomplete="off" spellcheck="false">
-        <div id="discover-list" class="drawer-body"></div>
-      </aside>
-      <aside id="drawer-cheats" class="drawer right" data-drawer="cheats" aria-hidden="true" aria-label="Cheat sheet">
-        <header><h2>Cheat sheet</h2><button class="drawer-close" title="Close (Esc)">&times;</button></header>
-        <div id="cheat-body" class="drawer-body"></div>
+
+      <!-- Right: slide-over panel with two sub-menus -->
+      <aside id="drawer-cheats" class="drawer right" aria-hidden="true" aria-label="Commands">
+        <header><h2>Commands</h2><button class="drawer-close" title="Close (Esc)">&times;</button></header>
+        <nav class="subtabs">
+          <button class="subtab on" data-tab="tree">Cheat sheet</button>
+          <button class="subtab" data-tab="discover">Discover</button>
+        </nav>
+        <div id="panel-tree" class="panel">
+          <input id="tree-filter" class="panel-input" type="search" placeholder="Filter the cheat sheet, e.g. update" autocomplete="off" spellcheck="false">
+          <div class="tree-tools">
+            <button id="tree-expand" class="link-btn">Expand all</button>
+            <button id="tree-collapse" class="link-btn">Collapse all</button>
+          </div>
+          <div id="cheat-body" class="drawer-body"></div>
+        </div>
+        <div id="panel-discover" class="panel" hidden>
+          <input id="discover-search" class="panel-input" type="search" placeholder="What do you want to do? e.g. copy a file" autocomplete="off" spellcheck="false">
+          <div id="discover-list" class="drawer-body"></div>
+        </div>
       </aside>
     </div>
     <script type="module" src="/src/main.js"></script>
