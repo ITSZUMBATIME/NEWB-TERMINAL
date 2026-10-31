@@ -74,9 +74,9 @@ function cycleLogo() {
 
 // Layouts for the logo and system info.
 const LAYOUTS = [
-  { id: "text", name: "Text", hint: "logo and info print at the top of each new tab and scroll away like normal output. Press Ctrl+Shift+T to see it." },
-  { id: "pinned", name: "Pinned", hint: "animated logo and info stay at the top of the window." },
-  { id: "logo", name: "Logo only", hint: "just the animated logo, pinned." },
+  { id: "pinned", name: "Header", hint: "animated logo and info sit above the terminal and scroll away as you work. Scroll up to bring them back." },
+  { id: "text", name: "Text", hint: "logo and info print at the top of each new tab as plain text. Press Ctrl+Shift+T to see it." },
+  { id: "logo", name: "Logo only", hint: "just the animated logo, above the terminal." },
   { id: "off", name: "Off", hint: "nothing extra, a plain terminal." },
 ];
 let layoutIndex = 0;
@@ -95,7 +95,7 @@ function setLayout(i, announce) {
   layoutIndex = (i + LAYOUTS.length) % LAYOUTS.length;
   const layout = LAYOUTS[layoutIndex];
   heroEl.dataset.layout = layout.id;
-  saveSetting("akin.layout.v3", layout.id);
+  saveSetting("akin.layout.v4", layout.id);
   if (announce) toast(`Layout: ${layout.name} (${layoutIndex + 1} of ${LAYOUTS.length}): ${layout.hint}`);
 }
 function cycleLayout() {
@@ -112,9 +112,73 @@ async function loadInfo() {
   }
 }
 
+/* ---------- Scrolling header ----------
+   The logo/info header sits at the top of the active tab, above the terminal.
+   `tab.s` is how far it has scrolled up (0 = fully showing, header height = gone). */
+
+const headerHeight = () => heroEl.offsetHeight; // 0 when the layout hides it
+
+function applyScroll(tab) {
+  const H = headerHeight();
+  tab.s = Math.max(0, Math.min(H, tab.s));
+  if (tab.id === activeId) heroEl.style.transform = `translateY(${-tab.s}px)`;
+  tab.holder.style.transform = `translateY(${H - tab.s}px)`;
+}
+
+// As output fills the screen, slide the header away so the cursor never gets pushed off the bottom.
+function keepCursorInView(tab) {
+  const H = headerHeight();
+  if (!H || tab.id !== activeId || !tab.opened) return;
+  const buf = tab.term.buffer.active;
+  if (buf.type === "alternate") {
+    // Full-screen programs (editors and so on) get the whole window.
+    tab.s = H;
+    applyScroll(tab);
+    return;
+  }
+  if (buf.viewportY !== buf.baseY) return; // you are reading history: leave it alone
+  const screen = tab.term.element?.querySelector(".xterm-screen");
+  if (!screen) return;
+  const cellH = screen.clientHeight / tab.term.rows;
+  const need = H + (buf.cursorY + 1) * cellH - tab.holder.clientHeight + 4;
+  if (need > tab.s) {
+    tab.s = need;
+    applyScroll(tab);
+  }
+}
+
+// Mouse wheel: scrolling down first slides the header away, then the terminal scrolls.
+// Scrolling up goes through the terminal's history first, then brings the header back.
+function handleWheel(tab, e) {
+  const H = headerHeight();
+  if (!H) return true;
+  const screen = tab.term.element?.querySelector(".xterm-screen");
+  const cellH = screen ? screen.clientHeight / tab.term.rows : 16;
+  let dy = e.deltaY;
+  if (e.deltaMode === 1) dy *= cellH;
+  else if (e.deltaMode === 2) dy *= tab.holder.clientHeight;
+  if (!dy) return true;
+
+  const buf = tab.term.buffer.active;
+  if (buf.type === "alternate") return true;
+  if (dy > 0 && tab.s < H) {
+    tab.s += dy;
+    applyScroll(tab);
+    e.preventDefault();
+    return false;
+  }
+  if (dy < 0 && buf.viewportY === 0 && tab.s > 0) {
+    tab.s += dy;
+    applyScroll(tab);
+    e.preventDefault();
+    return false;
+  }
+  return true;
+}
+
 /* ---------- Tabs ---------- */
 
-const tabs = []; // each: { id, term, fit, pane, tabEl, labelEl, opened }
+const tabs = []; // each: { id, term, fit, pane, holder, s, tabEl, labelEl, opened }
 let activeId = null;
 let nextId = 1;
 
@@ -139,8 +203,13 @@ function activate(id) {
     t.pane.classList.toggle("active", on);
   }
   const tab = activeTab();
+  if (tab) {
+    tab.pane.prepend(heroEl); // the header travels with the active tab
+    applyScroll(tab);
+  }
   if (tab && tab.opened) {
     fitAndResize(tab);
+    keepCursorInView(tab);
     tab.term.focus();
   }
 }
@@ -151,6 +220,9 @@ async function newTab() {
   const pane = document.createElement("div");
   pane.className = "pane";
   panesEl.appendChild(pane);
+  const holder = document.createElement("div");
+  holder.className = "term-holder";
+  pane.appendChild(holder);
 
   const tabEl = document.createElement("div");
   tabEl.className = "tab";
@@ -174,7 +246,7 @@ async function newTab() {
   const fit = new FitAddon();
   term.loadAddon(fit);
 
-  const tab = { id, term, fit, pane, tabEl, labelEl, opened: false };
+  const tab = { id, term, fit, pane, holder, s: 0, tabEl, labelEl, opened: false };
   tabs.push(tab);
 
   tabEl.addEventListener("click", () => activate(id));
@@ -185,11 +257,18 @@ async function newTab() {
 
   // Show the pane first: xterm can only measure itself when it is visible.
   activate(id);
-  term.open(pane);
+  term.open(holder);
   tab.opened = true;
   fit.fit();
 
-  term.onData((data) => invoke("pty_write", { id, data }));
+  term.onData((data) => {
+    invoke("pty_write", { id, data });
+    keepCursorInView(tab);
+  });
+  term.attachCustomWheelEventHandler((e) => handleWheel(tab, e));
+  term.onWriteParsed(() => keepCursorInView(tab));
+  term.onCursorMove(() => keepCursorInView(tab));
+  term.buffer.onBufferChange(() => keepCursorInView(tab));
   term.onTitleChange((title) => {
     if (title) labelEl.textContent = title;
   });
@@ -252,6 +331,7 @@ function closeTab(id, alreadyExited = false) {
   if (i === -1) return;
   const tab = tabs[i];
   if (!alreadyExited) invoke("pty_kill", { id });
+  if (heroEl.parentElement === tab.pane) panesEl.after(heroEl); // rescue the header before the pane goes
   tab.term.dispose();
   tab.pane.remove();
   tab.tabEl.remove();
@@ -273,19 +353,28 @@ async function start() {
   await listen("pty-exit", (e) => closeTab(e.payload.id, true));
 
   newTabBtn.addEventListener("click", newTab);
-  document.querySelector("#hero .logo").addEventListener("click", cycleLogo);
-  document.getElementById("ascii-logo").addEventListener("click", cycleLogo);
-  document.getElementById("toggle-info").addEventListener("click", cycleLayout);
+  // After clicking a control, hand the keyboard back to the terminal so shortcuts keep working.
+  const focusTerminal = () => activeTab()?.term.focus();
+  document.querySelector("#hero .logo").addEventListener("click", () => { cycleLogo(); focusTerminal(); });
+  document.getElementById("ascii-logo").addEventListener("click", () => { cycleLogo(); focusTerminal(); });
+  document.getElementById("toggle-info").addEventListener("click", () => { cycleLayout(); focusTerminal(); });
 
   const savedLogo = LOGOS.findIndex((l) => l.id === loadSetting("akin.logo.v2"));
   setLogo(savedLogo === -1 ? 0 : savedLogo, false);
-  const savedLayout = LAYOUTS.findIndex((l) => l.id === loadSetting("akin.layout.v3"));
+  const savedLayout = LAYOUTS.findIndex((l) => l.id === loadSetting("akin.layout.v4"));
   setLayout(savedLayout === -1 ? 0 : savedLayout, false);
 
   new ResizeObserver(() => {
     const tab = activeTab();
     if (tab && tab.opened) fitAndResize(tab);
   }).observe(panesEl);
+  // When the header changes size (window resize, layout change), keep everything lined up.
+  new ResizeObserver(() => {
+    const tab = activeTab();
+    if (!tab) return;
+    applyScroll(tab);
+    keepCursorInView(tab);
+  }).observe(heroEl);
 
   infoPromise = loadInfo();
   await newTab();

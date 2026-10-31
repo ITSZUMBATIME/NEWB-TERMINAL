@@ -75,9 +75,20 @@ html, body, #app {
 #new-tab:hover { background: var(--tab); color: var(--text); }
 
 #panes { flex: 1; position: relative; min-height: 0; }
-.pane { position: absolute; inset: 6px 0 0 8px; display: none; }
+.pane { position: absolute; inset: 0; overflow: hidden; display: none; }
 .pane.active { display: block; }
-.pane .xterm { height: 100%; }
+/* The terminal sits inside a holder. While the logo/info header is showing, the holder is
+   pushed down below it; scrolling slides both up together. */
+.term-holder {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  right: 0;
+  bottom: 0;
+  will-change: transform;
+  transition: transform 0.16s ease-out;
+}
+.term-holder .xterm { height: 100%; }
 
 #toggle-info {
   margin-left: auto;
@@ -94,9 +105,15 @@ html, body, #app {
 /* ---------- Main screen: logo + system info ---------- */
 #hero {
   --logo-h: clamp(48px, min(8vw, 14vh), 200px); /* grows and shrinks with the window */
-  position: relative;
+  position: absolute; /* lives at the top of the active tab and scrolls with it */
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
   padding: 8px 8px 10px 8px;
   background: var(--bg);
+  will-change: transform;
+  transition: transform 0.16s ease-out;
 }
 
 #logo-wrap { display: flex; justify-content: center; padding: 6px 0 10px 0; }

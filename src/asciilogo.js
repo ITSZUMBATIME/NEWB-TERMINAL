@@ -137,10 +137,12 @@ export class AsciiLogo {
     const img = await loadImage();
     if (this.style !== style) return;
 
+    const changed = !this.cov || this.cols !== grid.cols || this.rows !== grid.rows || this.drawnStyle !== style;
     this.cols = grid.cols;
     this.rows = grid.rows;
     this.cov = grid.cov;
     this.rand = grid.rand;
+    this.drawnStyle = style;
 
     // A faint, solid copy of the logo drawn behind the characters keeps the shape readable.
     const [gr, gg, gb] = cfg.color;
@@ -154,7 +156,7 @@ export class AsciiLogo {
     gctx.fillRect(0, 0, ghost.width, ghost.height);
     this.ghost = style === "dots" ? null : ghost;
 
-    this.startedAt = performance.now();
+    if (changed) this.startedAt = performance.now(); // only shuffle in when something really changed
     this.frame();
   }
 
