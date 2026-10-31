@@ -41,10 +41,10 @@ function toast(message) {
 
 // Logo styles. "plain" and "shimmer" are the traced shape; the others are drawn from characters.
 const LOGOS = [
-  { id: "plain", name: "Plain" },
-  { id: "shade", name: "ASCII Shade" },
   { id: "code", name: "ASCII Code" },
   { id: "dots", name: "Dot Matrix" },
+  { id: "shade", name: "ASCII Shade" },
+  { id: "plain", name: "Plain" },
   { id: "shimmer", name: "Shimmer" },
 ];
 let logoIndex = 0;
@@ -54,7 +54,7 @@ function setLogo(i, announce) {
   const logo = LOGOS[logoIndex];
   heroEl.dataset.logo = logo.id;
   asciiLogo.setStyle(ASCII_STYLES.includes(logo.id) ? logo.id : null);
-  saveSetting("akin.logo", logo.id);
+  saveSetting("akin.logo.v2", logo.id);
   if (announce) toast(`Logo style: ${logo.name} (${logoIndex + 1} of ${LOGOS.length}). Click the logo for the next one.`);
 }
 function cycleLogo() {
@@ -63,9 +63,9 @@ function cycleLogo() {
 
 // Layouts for the system info.
 const LAYOUTS = [
+  { id: "centred", name: "Centred", hint: "info pinned and centred under the logo." },
   { id: "flow", name: "Flow", hint: "info prints at the top of each new tab and scrolls away. Press Ctrl+Shift+T to see it." },
   { id: "header", name: "Header", hint: "info pinned under the logo." },
-  { id: "centred", name: "Centred", hint: "info pinned and centred under the logo." },
   { id: "off", name: "Off", hint: "logo only." },
 ];
 let layoutIndex = 0;
@@ -83,7 +83,7 @@ function setLayout(i, announce) {
   layoutIndex = (i + LAYOUTS.length) % LAYOUTS.length;
   const layout = LAYOUTS[layoutIndex];
   heroEl.dataset.layout = layout.id;
-  saveSetting("akin.layout", layout.id);
+  saveSetting("akin.layout.v2", layout.id);
   if (announce) toast(`Layout: ${layout.name} (${layoutIndex + 1} of ${LAYOUTS.length}): ${layout.hint}`);
 }
 function cycleLayout() {
@@ -258,9 +258,9 @@ async function start() {
   document.getElementById("ascii-logo").addEventListener("click", cycleLogo);
   document.getElementById("toggle-info").addEventListener("click", cycleLayout);
 
-  const savedLogo = LOGOS.findIndex((l) => l.id === loadSetting("akin.logo"));
+  const savedLogo = LOGOS.findIndex((l) => l.id === loadSetting("akin.logo.v2"));
   setLogo(savedLogo === -1 ? 0 : savedLogo, false);
-  const savedLayout = LAYOUTS.findIndex((l) => l.id === loadSetting("akin.layout"));
+  const savedLayout = LAYOUTS.findIndex((l) => l.id === loadSetting("akin.layout.v2"));
   setLayout(savedLayout === -1 ? 0 : savedLayout, false);
 
   new ResizeObserver(() => {

@@ -189,7 +189,9 @@ html, body, #app {
 #info-cols { display: flex; flex-wrap: wrap; column-gap: 4ch; row-gap: 10px; }
 .col { min-width: 0; }
 .info-row { white-space: pre-wrap; overflow-wrap: anywhere; }
-.lbl { font-weight: bold; }
+.lbl { display: inline-flex; align-items: baseline; }
+.name::after { content: ":"; }
+.lead { display: none; }
 
 .palette {
   display: grid;
@@ -198,11 +200,31 @@ html, body, #app {
 }
 .palette span { height: 16px; display: block; }
 
-/* Centred: block sits in the middle; labels line up on their colons */
+/* Centred: the block sits in the middle. Headings start on one straight line,
+   a faint dotted line leads the eye across, and the values line up in a column. */
 #hero[data-layout="centred"] #info { padding-left: 0; display: flex; justify-content: center; }
 #hero[data-layout="centred"] #info-title { text-align: center; }
-#hero[data-layout="centred"] #info-cols { justify-content: center; }
-#hero[data-layout="centred"] .col { display: grid; grid-template-columns: auto auto; column-gap: 1ch; align-content: start; }
+#hero[data-layout="centred"] #info-cols { justify-content: center; column-gap: 6ch; }
+#hero[data-layout="centred"] .col {
+  display: grid;
+  grid-template-columns: var(--lw, max-content) max-content;
+  column-gap: 1ch;
+  align-content: start;
+}
 #hero[data-layout="centred"] .info-row { display: contents; }
-#hero[data-layout="centred"] .lbl { text-align: right; }
+#hero[data-layout="centred"] .lbl { display: flex; align-items: baseline; gap: 0.8ch; }
+#hero[data-layout="centred"] .name::after { content: none; }
+#hero[data-layout="centred"] .lead {
+  display: block;
+  flex: 1;
+  min-width: 2ch;
+  border-bottom: 1px dotted #55606f;
+  transform: translateY(-0.32em);
+}
 #hero[data-layout="centred"] .palette { justify-content: center; }
+
+/* Centred, when the window is too narrow for two blocks side by side:
+   stack them so every heading still starts on the same line. */
+@media (max-width: 1280px) {
+  #hero[data-layout="centred"] #info-cols { flex-direction: column; align-items: flex-start; }
+}

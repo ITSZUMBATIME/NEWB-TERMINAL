@@ -38,7 +38,12 @@ function webRow(row) {
   el.className = "info-row";
   const lbl = document.createElement("span");
   lbl.className = "lbl";
-  lbl.append(piecesToFragment(cutPieces(pieces, 0, row.idx + 1))); // label and its colon
+  const name = document.createElement("span");
+  name.className = "name"; // the colon is added by the stylesheet, where the layout wants one
+  name.append(piecesToFragment(cutPieces(pieces, 0, row.idx)));
+  const lead = document.createElement("span");
+  lead.className = "lead"; // faint dotted line that guides the eye to the value
+  lbl.append(name, lead);
   const val = document.createElement("span");
   val.className = "val";
   val.append(piecesToFragment(cutPieces(pieces, row.idx + 2)));
@@ -51,6 +56,10 @@ export function renderWeb(model, els) {
   els.left.replaceChildren();
   els.right.replaceChildren();
   els.palette.replaceChildren();
+
+  // Both columns share one heading width, so every value lines up.
+  const longest = Math.max(0, ...[...model.left, ...model.right].map((r) => [...r.text.slice(0, r.idx)].length));
+  els.title.closest("#info-inner").style.setProperty("--lw", `${longest + 3}ch`);
 
   if (model.title) els.title.append(piecesToFragment(parseAnsi(model.title.raw)));
   for (const r of model.left) els.left.append(webRow(r));
