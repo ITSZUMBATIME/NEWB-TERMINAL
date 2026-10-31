@@ -78,3 +78,50 @@ html, body, #app {
 .pane { position: absolute; inset: 6px 0 0 8px; display: none; }
 .pane.active { display: block; }
 .pane .xterm { height: 100%; }
+
+/* ---------- Logo header ---------- */
+#header {
+  display: flex;
+  justify-content: center;
+  padding: 14px 0 6px 0;
+}
+
+/* The wrapper adds the glow; the inner box is cut into the AKIN shape. */
+#header .logo {
+  --logo-h: 72px;
+  height: var(--logo-h);
+  width: calc(var(--logo-h) * 2.52);
+  background: linear-gradient(
+    100deg,
+    #9aa3b2 0%,
+    #e8dcc0 30%,
+    #ffffff 50%,
+    #e8dcc0 70%,
+    #9aa3b2 100%
+  );
+  background-size: 250% 100%;
+  -webkit-mask: url("./assets/akin-logo.svg") center / contain no-repeat;
+  mask: url("./assets/akin-logo.svg") center / contain no-repeat;
+  animation: akin-shimmer 7s ease-in-out infinite;
+}
+
+/* The glow has to sit on a parent: effects on the cut-out box itself get clipped. */
+#header {
+  filter: drop-shadow(0 0 8px rgba(78, 161, 255, 0.35));
+  animation: akin-glow 5s ease-in-out infinite;
+}
+
+@keyframes akin-shimmer {
+  0%   { background-position: 100% 0; }
+  50%  { background-position: 0% 0; }
+  100% { background-position: 100% 0; }
+}
+
+@keyframes akin-glow {
+  0%, 100% { filter: drop-shadow(0 0 5px rgba(78, 161, 255, 0.25)); }
+  50%      { filter: drop-shadow(0 0 14px rgba(78, 161, 255, 0.55)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #header, #header .logo { animation: none; }
+}

@@ -36,6 +36,24 @@ const THEME = {
   brightWhite: "#ffffff",
 };
 
+// ---------- Opening banner (system info, like fastfetch) ----------
+let bannerShown = false;
+
+async function makeBanner() {
+  try {
+    const info = await invoke("system_info");
+    const E = "\x1b[";
+    const title = `${E}1;32m${info.user}${E}0m@${E}1;32m${info.host}${E}0m`;
+    const rule = "-".repeat(info.user.length + 1 + info.host.length);
+    const rows = info.lines.map((l) => `${E}1;36m${l.label}${E}0m: ${l.value}`);
+    const normal = [40, 41, 42, 43, 44, 45, 46, 47].map((n) => `${E}${n}m   `).join("") + `${E}0m`;
+    const bright = [100, 101, 102, 103, 104, 105, 106, 107].map((n) => `${E}${n}m   `).join("") + `${E}0m`;
+    return [title, rule, ...rows, "", normal, bright, ""].join("\r\n") + "\r\n";
+  } catch (_) {
+    return ""; // no banner is better than a broken start
+  }
+}
+
 const tabs = []; // each: { id, term, fit, pane, tabEl, labelEl }
 let activeId = null;
 let nextId = 1;
@@ -141,6 +159,11 @@ async function newTab() {
     }
     return true;
   });
+
+  if (!bannerShown) {
+    bannerShown = true;
+    term.write(await makeBanner());
+  }
 
   await invoke("pty_spawn", { id, cols: term.cols, rows: term.rows });
   term.focus();

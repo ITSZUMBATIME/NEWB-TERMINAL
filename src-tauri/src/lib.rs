@@ -2,6 +2,8 @@
 // Its job: start a real shell (bash, zsh...) for each tab, pass the keys you type
 // into it, and pass everything the shell prints back to the window.
 
+mod sysinfo;
+
 use std::{
     collections::HashMap,
     io::{Read, Write},
@@ -160,7 +162,12 @@ pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
-            pty_spawn, pty_write, pty_resize, pty_kill, quit_app
+            pty_spawn,
+            pty_write,
+            pty_resize,
+            pty_kill,
+            quit_app,
+            sysinfo::system_info
         ])
         .run(tauri::generate_context!())
         .expect("error while running AKIN");
