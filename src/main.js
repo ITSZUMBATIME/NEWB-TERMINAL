@@ -11,6 +11,8 @@ import "./style.css";
 import { THEME } from "./theme.js";
 import { buildModel, renderWeb } from "./info.js";
 import { printBanner } from "./banner.js";
+import { initDrawers } from "./drawers.js";
+import { parseSpec, startTemplate, handleTemplateKey, cancelTemplate, refresh as refreshTemplate } from "./template.js";
 import { AsciiLogo, ASCII_STYLES } from "./asciilogo.js";
 
 const tabsEl = document.getElementById("tabs");
@@ -110,6 +112,25 @@ async function loadInfo() {
   } catch (_) {
     infoModel = null; // no info is better than a broken start
   }
+}
+
+/* ---------- Dropping commands into the terminal ---------- */
+
+let drawersApi = null;
+
+const templateIO = (tab) => ({
+  send: (text) => invoke("pty_write", { id: tab.id, data: text }),
+  toast,
+});
+
+// Type a command at the prompt (never presses Enter). Commands with blanks start the fill-in session.
+function insertCommand(cmd, risky) {
+  const tab = activeTab();
+  if (!tab || !tab.opened) return;
+  startTemplate(tab, parseSpec(cmd), templateIO(tab));
+  keepCursorInView(tab);
+  tab.term.focus();
+  if (risky) toast("Careful: this one can delete or change things. Check it, then press Enter.");
 }
 
 /* ---------- Scrolling header ----------
@@ -242,6 +263,7 @@ async function newTab() {
     cursorBlink: true,
     scrollback: 5000,
     theme: THEME,
+    allowProposedApi: true, // needed to highlight blanks in dropped commands
   });
   const fit = new FitAddon();
   term.loadAddon(fit);
@@ -262,11 +284,19 @@ async function newTab() {
   fit.fit();
 
   term.onData((data) => {
+    // Blanks in a dropped command may want this key (typing, Tab, Enter...).
+    if (handleTemplateKey(tab, data, templateIO(tab))) {
+      keepCursorInView(tab);
+      return;
+    }
     invoke("pty_write", { id, data });
     keepCursorInView(tab);
   });
   term.attachCustomWheelEventHandler((e) => handleWheel(tab, e));
-  term.onWriteParsed(() => keepCursorInView(tab));
+  term.onWriteParsed(() => {
+    keepCursorInView(tab);
+    if (tab.template) refreshTemplate(tab);
+  });
   term.onCursorMove(() => keepCursorInView(tab));
   term.buffer.onBufferChange(() => keepCursorInView(tab));
   term.onTitleChange((title) => {
@@ -295,6 +325,16 @@ async function newTab() {
     if (k === "l") {
       e.preventDefault();
       cycleLogo();
+      return false;
+    }
+    if (k === "d") {
+      e.preventDefault();
+      drawersApi?.toggle("discover");
+      return false;
+    }
+    if (k === "s") {
+      e.preventDefault();
+      drawersApi?.toggle("cheats");
       return false;
     }
     if (k === "i") {
@@ -331,6 +371,7 @@ function closeTab(id, alreadyExited = false) {
   if (i === -1) return;
   const tab = tabs[i];
   if (!alreadyExited) invoke("pty_kill", { id });
+  cancelTemplate(tab);
   if (heroEl.parentElement === tab.pane) panesEl.after(heroEl); // rescue the header before the pane goes
   tab.term.dispose();
   tab.pane.remove();
@@ -351,6 +392,13 @@ async function start() {
     if (t) t.term.write(e.payload.data);
   });
   await listen("pty-exit", (e) => closeTab(e.payload.id, true));
+
+  drawersApi = initDrawers({
+    onInsert: insertCommand,
+    toast,
+    focusTerminal: () => activeTab()?.term.focus(),
+    panesEl,
+  });
 
   newTabBtn.addEventListener("click", newTab);
   // After clicking a control, hand the keyboard back to the terminal so shortcuts keep working.

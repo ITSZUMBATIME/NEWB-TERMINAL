@@ -91,7 +91,6 @@ html, body, #app {
 .term-holder .xterm { height: 100%; }
 
 #toggle-info {
-  margin-left: auto;
   border: none;
   background: none;
   color: var(--muted);
@@ -147,7 +146,7 @@ html, body, #app {
   top: 44px;
   left: 12px;
   right: 12px;
-  z-index: 5;
+  z-index: 60;
   font-size: 12px;
   color: var(--muted);
   opacity: 0;
@@ -247,3 +246,110 @@ html, body, #app {
 @media (max-width: 1280px) {
   #hero[data-layout="pinned"] #info-cols { flex-direction: column; align-items: flex-start; }
 }
+
+/* ---------- Drawers: Discover (left) and Cheat sheet (right) ---------- */
+:root { --bar-h: 34px; }
+
+.bar-btn {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.bar-btn:hover { background: var(--tab); color: var(--text); }
+.bar-btn.active { color: var(--accent); }
+#open-cheats { margin-left: auto; }
+
+.drawer {
+  position: fixed;
+  top: var(--bar-h);
+  bottom: 0;
+  width: clamp(300px, 28vw, 420px);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: rgba(15, 17, 20, 0.97);
+  box-shadow: 0 0 28px rgba(0, 0, 0, 0.65);
+  transition: transform 0.2s ease;
+  pointer-events: none; /* a closed drawer never gets in the way */
+  font-size: 13px;
+}
+.drawer.left { left: 0; transform: translateX(-104%); border-right: 1px solid #000; }
+.drawer.right { right: 0; transform: translateX(104%); border-left: 1px solid #000; }
+.drawer.open { transform: none; pointer-events: auto; }
+
+.drawer header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #1d2128; }
+.drawer header h2 { flex: 1; margin: 0; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text); }
+.drawer-close { border: none; background: none; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.drawer-close:hover { color: var(--text); }
+
+#discover-search {
+  margin: 10px 12px 4px 12px;
+  padding: 8px 10px;
+  background: #14161a;
+  border: 1px solid #2c313a;
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+#discover-search:focus { border-color: var(--accent); }
+
+.drawer-body { flex: 1; overflow-y: auto; padding: 2px 12px 18px 12px; }
+.cat-name { margin: 14px 0 6px 0; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+
+.cmd {
+  display: block;
+  margin-top: 5px;
+  font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono", monospace;
+  font-size: 12.5px;
+  color: #9ecbff;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.blank { margin: 0 1px; padding: 0 4px; border-radius: 3px; background: #2a4a78; color: #fff; }
+
+.card {
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  background: #171a1f;
+  border: 1px solid #20242b;
+  border-radius: 8px;
+  cursor: grab;
+  user-select: none;
+}
+.card:hover { border-color: #3a4150; }
+.card-top { display: flex; align-items: center; gap: 8px; }
+.card-title { flex: 1; font-weight: 600; font-size: 13px; }
+.card-why { display: none; margin-top: 7px; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.card.open .card-why { display: block; }
+.tag { padding: 1px 5px; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #ff6369; border: 1px solid #5b2a2d; border-radius: 4px; }
+.star { border: none; background: none; padding: 0 2px; font-size: 15px; color: var(--muted); cursor: pointer; }
+.star:hover, .star.on { color: #e0a63a; }
+
+.row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; margin-bottom: 4px; padding: 6px 8px; background: #171a1f; border-radius: 6px; cursor: grab; user-select: none; }
+.row:hover { background: #1b1f26; }
+.row .cmd { grid-column: 1; margin: 0; }
+.row-title { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); }
+.unpin { grid-column: 2; grid-row: 1; border: none; background: none; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.unpin:hover { color: #ff6369; }
+
+.key-row { display: flex; align-items: baseline; gap: 10px; padding: 4px 2px; font-size: 12px; }
+.key-row .row-title { flex: 1; grid-column: auto; }
+kbd { padding: 1px 6px; font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 11.5px; color: var(--text); white-space: nowrap; background: #1d2128; border: 1px solid #2c313a; border-bottom-width: 2px; border-radius: 4px; }
+
+.empty { padding: 8px 4px; font-size: 12px; line-height: 1.45; color: var(--muted); }
+
+/* Dragging */
+.drag-ghost { position: fixed; left: 0; top: 0; z-index: 200; padding: 6px 10px; pointer-events: none; background: #10243d; border: 1px solid var(--accent); border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5); }
+.drag-ghost .cmd { margin: 0; }
+body.dragging, body.dragging * { cursor: grabbing !important; user-select: none !important; }
+#panes.drop-ready { outline: 2px dashed var(--accent); outline-offset: -4px; }
+.fav-drop { margin: 0 -6px; padding: 0 6px 6px 6px; border: 1px dashed transparent; border-radius: 8px; }
+.fav-drop.drop-ready { background: rgba(78, 161, 255, 0.08); border-color: var(--accent); }

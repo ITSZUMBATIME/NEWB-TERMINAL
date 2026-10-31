@@ -8,8 +8,10 @@
   <body>
     <div id="app">
       <div id="tabbar">
+        <button id="open-discover" class="bar-btn" title="Discover commands (Ctrl+Shift+D)">&#9703; Discover</button>
         <div id="tabs"></div>
         <button id="new-tab" title="New tab (Ctrl+Shift+T)">+</button>
+        <button id="open-cheats" class="bar-btn" title="Cheat sheet (Ctrl+Shift+S)">Cheat sheet &#9704;</button>
         <button id="toggle-info" title="Change the system info layout (Ctrl+Shift+I)">&#9432;</button>
       </div>
       <div id="hero" data-logo="code" data-layout="pinned">
@@ -30,6 +32,15 @@
       </div>
       <div id="panes"></div>
       <div id="logo-toast"></div>
+      <aside id="drawer-discover" class="drawer left" data-drawer="discover" aria-hidden="true" aria-label="Discover commands">
+        <header><h2>Discover</h2><button class="drawer-close" title="Close (Esc)">&times;</button></header>
+        <input id="discover-search" type="search" placeholder="What do you want to do? e.g. copy a file" autocomplete="off" spellcheck="false">
+        <div id="discover-list" class="drawer-body"></div>
+      </aside>
+      <aside id="drawer-cheats" class="drawer right" data-drawer="cheats" aria-hidden="true" aria-label="Cheat sheet">
+        <header><h2>Cheat sheet</h2><button class="drawer-close" title="Close (Esc)">&times;</button></header>
+        <div id="cheat-body" class="drawer-body"></div>
+      </aside>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>
