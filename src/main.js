@@ -9,7 +9,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "./style.css";
 import { THEME } from "./theme.js";
-import { buildModel, renderWeb, flowText } from "./info.js";
+import { buildModel, renderWeb } from "./info.js";
+import { printBanner } from "./banner.js";
 import { AsciiLogo, ASCII_STYLES } from "./asciilogo.js";
 
 const tabsEl = document.getElementById("tabs");
@@ -57,18 +58,29 @@ function setLogo(i, announce) {
   saveSetting("akin.logo.v2", logo.id);
   if (announce) toast(`Logo style: ${logo.name} (${logoIndex + 1} of ${LOGOS.length}). Click the logo for the next one.`);
 }
+function textLogoStyle() {
+  return LOGOS[logoIndex].id === "shade" ? "shade" : "code";
+}
 function cycleLogo() {
+  if (heroEl.dataset.layout === "text") {
+    // The printed banner can use the two character styles. New tabs pick up the change.
+    const next = textLogoStyle() === "code" ? "shade" : "code";
+    setLogo(LOGOS.findIndex((l) => l.id === next), false);
+    toast(`Logo style: ${LOGOS[logoIndex].name}. Open a new tab (Ctrl+Shift+T) to see it.`);
+    return;
+  }
   setLogo(logoIndex + 1, true);
 }
 
-// Layouts for the system info.
+// Layouts for the logo and system info.
 const LAYOUTS = [
-  { id: "centred", name: "Centred", hint: "info pinned and centred under the logo." },
-  { id: "flow", name: "Flow", hint: "info prints at the top of each new tab and scrolls away. Press Ctrl+Shift+T to see it." },
-  { id: "header", name: "Header", hint: "info pinned under the logo." },
-  { id: "off", name: "Off", hint: "logo only." },
+  { id: "text", name: "Text", hint: "logo and info print at the top of each new tab and scroll away like normal output. Press Ctrl+Shift+T to see it." },
+  { id: "pinned", name: "Pinned", hint: "animated logo and info stay at the top of the window." },
+  { id: "logo", name: "Logo only", hint: "just the animated logo, pinned." },
+  { id: "off", name: "Off", hint: "nothing extra, a plain terminal." },
 ];
 let layoutIndex = 0;
+let bannerShown = false;
 let infoModel = null;
 let infoPromise = null;
 
@@ -83,7 +95,7 @@ function setLayout(i, announce) {
   layoutIndex = (i + LAYOUTS.length) % LAYOUTS.length;
   const layout = LAYOUTS[layoutIndex];
   heroEl.dataset.layout = layout.id;
-  saveSetting("akin.layout.v2", layout.id);
+  saveSetting("akin.layout.v3", layout.id);
   if (announce) toast(`Layout: ${layout.name} (${layoutIndex + 1} of ${LAYOUTS.length}): ${layout.hint}`);
 }
 function cycleLayout() {
@@ -218,10 +230,17 @@ async function newTab() {
     return true;
   });
 
-  // Flow layout: print the system info at the top of the tab, above the prompt.
-  if (heroEl.dataset.layout === "flow") {
+  // Text layout: print the logo and system info at the top of the tab, above the prompt.
+  if (heroEl.dataset.layout === "text") {
     await infoPromise;
-    if (infoModel) term.write(flowText(infoModel, term.cols));
+    if (infoModel) {
+      try {
+        await printBanner(term, infoModel, { style: textLogoStyle(), animate: !bannerShown });
+      } catch (_) {
+        /* no banner is better than a broken start */
+      }
+      bannerShown = true;
+    }
   }
 
   await invoke("pty_spawn", { id, cols: term.cols, rows: term.rows });
@@ -260,7 +279,7 @@ async function start() {
 
   const savedLogo = LOGOS.findIndex((l) => l.id === loadSetting("akin.logo.v2"));
   setLogo(savedLogo === -1 ? 0 : savedLogo, false);
-  const savedLayout = LAYOUTS.findIndex((l) => l.id === loadSetting("akin.layout.v2"));
+  const savedLayout = LAYOUTS.findIndex((l) => l.id === loadSetting("akin.layout.v3"));
   setLayout(savedLayout === -1 ? 0 : savedLayout, false);
 
   new ResizeObserver(() => {

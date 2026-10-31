@@ -126,10 +126,11 @@ html, body, #app {
 }
 
 #logo-toast {
-  position: absolute;
-  top: 10px;
+  position: fixed;
+  top: 44px;
   left: 12px;
   right: 12px;
+  z-index: 5;
   font-size: 12px;
   color: var(--muted);
   opacity: 0;
@@ -167,9 +168,10 @@ html, body, #app {
 }
 
 /* ---------- System info (the pinned layouts) ---------- */
-/* "flow" prints into the terminal instead, and "off" shows nothing. */
-#hero[data-layout="flow"] #info,
-#hero[data-layout="off"] #info { display: none; }
+/* "text" prints into the terminal instead, "logo" shows only the logo, and "off" shows nothing. */
+#hero[data-layout="text"],
+#hero[data-layout="off"] { display: none; }
+#hero[data-layout="logo"] #info { display: none; }
 
 #info {
   font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono", monospace;
@@ -202,29 +204,29 @@ html, body, #app {
 
 /* Centred: the block sits in the middle. Headings start on one straight line,
    a faint dotted line leads the eye across, and the values line up in a column. */
-#hero[data-layout="centred"] #info { padding-left: 0; display: flex; justify-content: center; }
-#hero[data-layout="centred"] #info-title { text-align: center; }
-#hero[data-layout="centred"] #info-cols { justify-content: center; column-gap: 6ch; }
-#hero[data-layout="centred"] .col {
+#hero[data-layout="pinned"] #info { padding-left: 0; display: flex; justify-content: center; }
+#hero[data-layout="pinned"] #info-title { text-align: center; }
+#hero[data-layout="pinned"] #info-cols { justify-content: center; column-gap: 6ch; }
+#hero[data-layout="pinned"] .col {
   display: grid;
   grid-template-columns: var(--lw, max-content) max-content;
   column-gap: 1ch;
   align-content: start;
 }
-#hero[data-layout="centred"] .info-row { display: contents; }
-#hero[data-layout="centred"] .lbl { display: flex; align-items: baseline; gap: 0.8ch; }
-#hero[data-layout="centred"] .name::after { content: none; }
-#hero[data-layout="centred"] .lead {
+#hero[data-layout="pinned"] .info-row { display: contents; }
+#hero[data-layout="pinned"] .lbl { display: flex; align-items: baseline; gap: 0.8ch; }
+#hero[data-layout="pinned"] .name::after { content: none; }
+#hero[data-layout="pinned"] .lead {
   display: block;
   flex: 1;
   min-width: 2ch;
   border-bottom: 1px dotted #55606f;
   transform: translateY(-0.32em);
 }
-#hero[data-layout="centred"] .palette { justify-content: center; }
+#hero[data-layout="pinned"] .palette { justify-content: center; }
 
 /* Centred, when the window is too narrow for two blocks side by side:
    stack them so every heading still starts on the same line. */
 @media (max-width: 1280px) {
-  #hero[data-layout="centred"] #info-cols { flex-direction: column; align-items: flex-start; }
+  #hero[data-layout="pinned"] #info-cols { flex-direction: column; align-items: flex-start; }
 }

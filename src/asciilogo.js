@@ -1,12 +1,14 @@
-// Draws the AKIN logo out of characters ("ASCII art") on a canvas.
+// Draws the AKIN logo out of characters ("ASCII art").
 // The shape comes from the real logo file, so the gothic outline is kept.
-// Because it is drawn on a canvas it can scale with the window and animate.
+// Two ways to show it:
+//   - AsciiLogo: animated, on a canvas (used by the pinned layout)
+//   - sampleLogo + charFor: the raw character grid (used by the printed banner)
 
 import logoUrl from "./assets/akin-logo.svg?url";
 
 const LOGO_ASPECT = 1312 / 520; // width / height of the logo shape
 
-const STYLES = {
+export const STYLES = {
   // Classic ASCII: heavy characters in the middle, lighter ones on the edges.
   shade: { cell: 6.2, cellAspect: 2, color: [232, 220, 192], glow: "rgba(232, 220, 192, 0.30)" },
   // Binary: the letters are made of 0s and 1s.
@@ -16,10 +18,12 @@ const STYLES = {
 };
 
 export const ASCII_STYLES = Object.keys(STYLES);
+export const LOGO_ASPECT_RATIO = LOGO_ASPECT;
 
 const RAMP = " .:-=+*#%@";
 const INTERIOR = ["@", "@", "#", "%"];
 const FONT = '"JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono", monospace';
+export const SCRAMBLE = "01#%@+*:<>/\\";
 
 let imagePromise = null;
 function loadImage() {
@@ -35,6 +39,65 @@ function loadImage() {
 }
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+/**
+ * Look at the logo through a grid of `cols` columns and report how much of each
+ * cell the logo covers (0 to 1). `cellAspect` is how much taller a cell is than wide.
+ */
+export async function sampleLogo(cols, cellAspect, softEdges = true, edgeBoost = 0.6) {
+  const rows = Math.max(6, Math.round(cols / LOGO_ASPECT / cellAspect));
+  const img = await loadImage();
+
+  const px = 4;
+  const off = document.createElement("canvas");
+  off.width = cols * px;
+  off.height = Math.round(rows * px * cellAspect);
+  const octx = off.getContext("2d", { willReadFrequently: true });
+  octx.drawImage(img, 0, 0, off.width, off.height);
+  const data = octx.getImageData(0, 0, off.width, off.height).data;
+  const cellH = off.height / rows;
+
+  const cov = new Float32Array(cols * rows);
+  const rand = new Float32Array(cols * rows);
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      let sum = 0;
+      let count = 0;
+      let peak = 0;
+      const y0 = Math.floor(y * cellH);
+      const y1 = Math.max(y0 + 1, Math.floor((y + 1) * cellH));
+      for (let yy = y0; yy < y1; yy++) {
+        for (let xx = x * px; xx < (x + 1) * px; xx++) {
+          const a = data[(yy * off.width + xx) * 4 + 3];
+          sum += a;
+          if (a > peak) peak = a;
+          count++;
+        }
+      }
+      const i = y * cols + x;
+      const avg = sum / count / 255;
+      // Character styles also light up any cell the logo merely touches, so thin strokes survive.
+      cov[i] = softEdges ? Math.max(avg, (peak / 255) * edgeBoost) : avg;
+      rand[i] = Math.random();
+    }
+  }
+  return { cols, rows, cov, rand };
+}
+
+/** The character for one cell once it has "settled" ("" means leave it empty). */
+export function charFor(style, cov, r) {
+  if (style === "shade") {
+    if (cov < 0.1) return "";
+    if (cov > 0.8) return INTERIOR[Math.floor(r * INTERIOR.length)];
+    return RAMP[Math.round(Math.pow(cov, 0.8) * (RAMP.length - 1))];
+  }
+  if (style === "code") {
+    if (cov < 0.15) return "";
+    if (cov < 0.35) return r < 0.5 ? ":" : ".";
+    return r < 0.5 ? "0" : "1";
+  }
+  return "";
+}
 
 export class AsciiLogo {
   constructor(canvas) {
@@ -58,7 +121,8 @@ export class AsciiLogo {
 
   async layout() {
     if (!this.style) return;
-    const cfg = STYLES[this.style];
+    const style = this.style;
+    const cfg = STYLES[style];
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width < 10) return;
 
@@ -68,21 +132,15 @@ export class AsciiLogo {
     this.cssW = rect.width;
     this.cssH = rect.height;
 
-    this.cols = clamp(Math.round(rect.width / cfg.cell), 36, 140);
-    this.rows = Math.max(6, Math.round(this.cols / LOGO_ASPECT / cfg.cellAspect));
-
+    const cols = clamp(Math.round(rect.width / cfg.cell), 36, 140);
+    const grid = await sampleLogo(cols, cfg.cellAspect, style !== "dots");
     const img = await loadImage();
-    if (!this.style) return;
+    if (this.style !== style) return;
 
-    // Look at the logo through a grid: how much of each cell is covered?
-    const px = 4;
-    const off = document.createElement("canvas");
-    off.width = this.cols * px;
-    off.height = Math.round(this.rows * px * cfg.cellAspect);
-    const octx = off.getContext("2d", { willReadFrequently: true });
-    octx.drawImage(img, 0, 0, off.width, off.height);
-    const data = octx.getImageData(0, 0, off.width, off.height).data;
-    const cellH = off.height / this.rows;
+    this.cols = grid.cols;
+    this.rows = grid.rows;
+    this.cov = grid.cov;
+    this.rand = grid.rand;
 
     // A faint, solid copy of the logo drawn behind the characters keeps the shape readable.
     const [gr, gg, gb] = cfg.color;
@@ -94,51 +152,10 @@ export class AsciiLogo {
     gctx.globalCompositeOperation = "source-in";
     gctx.fillStyle = `rgb(${gr},${gg},${gb})`;
     gctx.fillRect(0, 0, ghost.width, ghost.height);
-    this.ghost = this.style === "dots" ? null : ghost;
+    this.ghost = style === "dots" ? null : ghost;
 
-    const n = this.cols * this.rows;
-    this.cov = new Float32Array(n);
-    this.rand = new Float32Array(n);
-    for (let y = 0; y < this.rows; y++) {
-      for (let x = 0; x < this.cols; x++) {
-        let sum = 0;
-        let count = 0;
-        let peak = 0;
-        const y0 = Math.floor(y * cellH);
-        const y1 = Math.max(y0 + 1, Math.floor((y + 1) * cellH));
-        for (let yy = y0; yy < y1; yy++) {
-          for (let xx = x * px; xx < (x + 1) * px; xx++) {
-            const a = data[(yy * off.width + xx) * 4 + 3];
-            sum += a;
-            if (a > peak) peak = a;
-            count++;
-          }
-        }
-        const i = y * this.cols + x;
-        const avg = sum / count / 255;
-        // Character styles also light up any cell the logo merely touches, so thin strokes survive.
-        this.cov[i] = this.style === "dots" ? avg : Math.max(avg, (peak / 255) * 0.6);
-        this.rand[i] = Math.random();
-      }
-    }
     this.startedAt = performance.now();
     this.frame();
-  }
-
-  finalChar(i) {
-    const cov = this.cov[i];
-    const r = this.rand[i];
-    if (this.style === "shade") {
-      if (cov < 0.1) return "";
-      if (cov > 0.8) return INTERIOR[Math.floor(r * INTERIOR.length)];
-      return RAMP[Math.round(Math.pow(cov, 0.8) * (RAMP.length - 1))];
-    }
-    if (this.style === "code") {
-      if (cov < 0.15) return "";
-      if (cov < 0.35) return r < 0.5 ? ":" : ".";
-      return r < 0.5 ? "0" : "1";
-    }
-    return "";
   }
 
   frame() {
@@ -200,14 +217,14 @@ export class AsciiLogo {
           continue;
         }
 
-        let char = this.finalChar(i);
+        let char = charFor(this.style, cov, this.rand[i]);
         let alpha = (0.45 + 0.55 * Math.min(1, cov * 1.15)) * (1 + lift * 0.3);
         if (!char) continue;
         if (!settled) {
-          char = "01#%@+*:<>/\\"[Math.floor(Math.random() * 12)];
+          char = SCRAMBLE[Math.floor(Math.random() * SCRAMBLE.length)];
           alpha = 0.35;
         } else if (!this.reduced && Math.random() < 0.012) {
-          char = "01#%@+*:<>/\\"[Math.floor(Math.random() * 12)]; // tiny flicker
+          char = SCRAMBLE[Math.floor(Math.random() * SCRAMBLE.length)]; // tiny flicker
         }
         ctx.fillStyle = `rgba(${r},${g},${b},${Math.min(1, alpha)})`;
         ctx.fillText(char, (x + 0.5) * cw, (y + 0.55) * ch);

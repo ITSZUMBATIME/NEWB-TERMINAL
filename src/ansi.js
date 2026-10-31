@@ -86,3 +86,29 @@ export function piecesToFragment(pieces) {
   }
   return frag;
 }
+
+function cssToRgb(c) {
+  let m = /^#([0-9a-f]{6})$/i.exec(c);
+  if (m) {
+    const n = parseInt(m[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  m = /^rgb\((\d+),(\d+),(\d+)\)$/.exec(c);
+  return m ? [+m[1], +m[2], +m[3]] : null;
+}
+
+/** Turn pieces back into text with terminal colour codes. */
+export function piecesToAnsi(pieces) {
+  return (
+    pieces
+      .map((p) => {
+        let out = "\x1b[0m";
+        if (p.bold) out += "\x1b[1m";
+        if (p.ul) out += "\x1b[4m";
+        const rgb = p.fg && cssToRgb(p.fg);
+        if (rgb) out += `\x1b[38;2;${rgb.join(";")}m`;
+        return out + p.text;
+      })
+      .join("") + "\x1b[0m"
+  );
+}

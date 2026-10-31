@@ -1,12 +1,13 @@
 // The system info display (the fastfetch-style lines).
 // One set of data, shown two ways:
-//   - as web text pinned under the logo (layouts "header" and "centred")
-//   - as plain terminal text printed into a tab (layout "flow")
+//   - as web text pinned under the logo (layout "pinned")
+//   - as terminal text printed into a tab (see banner.js)
 
 import { THEME, COLOR_NAMES } from "./theme.js";
 import { stripAnsi, parseAnsi, cutPieces, piecesToFragment } from "./ansi.js";
 
-const E = "\x1b[";
+// Rows with these headings are left out (add more names here to hide more).
+const HIDDEN_LABELS = new Set(["Terminal"]);
 
 /** Turn the raw lines from Rust into: a title, and rows split into two columns. */
 export function buildModel(lines) {
@@ -21,12 +22,12 @@ export function buildModel(lines) {
       if (!title) title = { raw: line, text };
       continue;
     }
+    if (HIDDEN_LABELS.has(text.slice(0, idx))) continue;
     rows.push({ raw: line, text, idx });
   }
 
-  // Left: the software side. Right: the machine itself (starting at "Terminal").
-  let split = rows.findIndex((r) => r.text.startsWith("Terminal"));
-  if (split <= 0) split = Math.ceil(rows.length / 2);
+  // Two columns of equal height (the left one gets the extra row if the count is odd).
+  const split = Math.ceil(rows.length / 2);
   return { title, left: rows.slice(0, split), right: rows.slice(split) };
 }
 
@@ -73,50 +74,4 @@ export function renderWeb(model, els) {
       els.palette.append(sw);
     }
   }
-}
-
-/* ---------- Terminal text ---------- */
-
-const width = (s) => [...stripAnsi(s)].length;
-const padTo = (s, w) => s + " ".repeat(Math.max(0, w - width(s)));
-
-/**
- * Build the text printed at the top of a tab. Two columns when the terminal is
- * wide enough, otherwise one column.
- */
-export function flowText(model, cols) {
-  const indent = 3;
-  const gap = 4;
-  const pad = " ".repeat(indent);
-  const reset = `${E}0m`;
-
-  const left = model.left.map((r) => r.raw + reset);
-  const right = model.right.map((r) => r.raw + reset);
-  const leftW = Math.max(0, ...left.map(width));
-  const rightW = Math.max(0, ...right.map(width));
-  const twoCols = cols >= indent + leftW + gap + rightW + 2;
-
-  const out = [""];
-  if (model.title) out.push(pad + model.title.raw + reset);
-  const ruleW = twoCols
-    ? leftW + gap + rightW
-    : Math.min(Math.max(leftW, rightW), Math.max(10, cols - indent - 2));
-  out.push(pad + `${E}90m${"─".repeat(ruleW)}${reset}`);
-
-  if (twoCols) {
-    const n = Math.max(left.length, right.length);
-    for (let i = 0; i < n; i++) {
-      const l = left[i] ?? "";
-      const r = right[i] ?? "";
-      out.push(pad + padTo(l, leftW) + " ".repeat(gap) + r);
-    }
-  } else {
-    for (const l of [...left, ...right]) out.push(pad + l);
-  }
-
-  // Colour blocks, like fastfetch's palette.
-  const blocks = (start) =>
-    Array.from({ length: 8 }, (_, i) => `${E}${start + i}m   `).join("") + reset;
-  out.push("", pad + blocks(40), pad + blocks(100), "");
-  return out.join("\r\n") + "\r\n";
 }
