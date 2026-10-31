@@ -79,49 +79,137 @@ html, body, #app {
 .pane.active { display: block; }
 .pane .xterm { height: 100%; }
 
-/* ---------- Logo header ---------- */
-#header {
-  display: flex;
-  justify-content: center;
-  padding: 14px 0 6px 0;
+#toggle-info {
+  margin-left: auto;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+#toggle-info:hover { background: var(--tab); color: var(--text); }
+
+/* ---------- Main screen: logo + system info ---------- */
+#hero {
+  position: relative;
+  padding: 8px 8px 10px 8px;
+  background: var(--bg);
 }
 
-/* The wrapper adds the glow; the inner box is cut into the AKIN shape. */
-#header .logo {
-  --logo-h: 72px;
+#logo-wrap { display: flex; justify-content: center; padding: 6px 0 10px 0; }
+
+/* The logo grows and shrinks with the window (limited by width AND height). */
+.logo {
+  --logo-h: clamp(48px, min(8vw, 14vh), 200px);
   height: var(--logo-h);
   width: calc(var(--logo-h) * 2.52);
-  background: linear-gradient(
-    100deg,
-    #9aa3b2 0%,
-    #e8dcc0 30%,
-    #ffffff 50%,
-    #e8dcc0 70%,
-    #9aa3b2 100%
-  );
-  background-size: 250% 100%;
+  cursor: pointer;
+  background-repeat: no-repeat;
   -webkit-mask: url("./assets/akin-logo.svg") center / contain no-repeat;
   mask: url("./assets/akin-logo.svg") center / contain no-repeat;
-  animation: akin-shimmer 7s ease-in-out infinite;
 }
 
-/* The glow has to sit on a parent: effects on the cut-out box itself get clipped. */
-#header {
-  filter: drop-shadow(0 0 8px rgba(78, 161, 255, 0.35));
-  animation: akin-glow 5s ease-in-out infinite;
+#logo-toast {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 0.4s;
+  pointer-events: none;
 }
+#logo-toast.show { opacity: 1; }
 
-@keyframes akin-shimmer {
-  0%   { background-position: 100% 0; }
-  50%  { background-position: 0% 0; }
-  100% { background-position: 100% 0; }
+/* Logo style 1: Shimmer (cream and silver, blue glow) */
+#hero[data-logo="shimmer"] .logo {
+  background: linear-gradient(100deg, #9aa3b2 0%, #e8dcc0 30%, #ffffff 50%, #e8dcc0 70%, #9aa3b2 100%);
+  background-size: 250% 100%;
+  animation: akin-sweep 7s ease-in-out infinite;
 }
+#hero[data-logo="shimmer"] #logo-wrap { animation: glow-blue 5s ease-in-out infinite; }
 
-@keyframes akin-glow {
+/* Logo style 2: Ember (dark red to gold, flickering) */
+#hero[data-logo="ember"] .logo {
+  background: linear-gradient(100deg, #7a1f0e 0%, #ff5a1f 30%, #ffd37a 50%, #ff5a1f 70%, #7a1f0e 100%);
+  background-size: 250% 100%;
+  animation: akin-sweep 4.5s ease-in-out infinite;
+}
+#hero[data-logo="ember"] #logo-wrap { animation: glow-ember 3s steps(1, end) infinite; }
+
+/* Logo style 3: Neon (bright green-cyan, pulsing) */
+#hero[data-logo="neon"] .logo {
+  background: linear-gradient(90deg, #39ffb0, #2de2e6);
+}
+#hero[data-logo="neon"] #logo-wrap { animation: glow-neon 2.6s ease-in-out infinite; }
+
+/* Logo style 4: Frost (ice blue and white, slow) */
+#hero[data-logo="frost"] .logo {
+  background: linear-gradient(100deg, #7fb8ff 0%, #d6ecff 35%, #ffffff 50%, #d6ecff 65%, #7fb8ff 100%);
+  background-size: 250% 100%;
+  animation: akin-sweep 10s ease-in-out infinite;
+}
+#hero[data-logo="frost"] #logo-wrap { animation: glow-ice 6s ease-in-out infinite; }
+
+/* Logo style 5: Plain (one calm colour, no movement) */
+#hero[data-logo="plain"] .logo { background: #e8dcc0; }
+
+@keyframes akin-sweep {
+  0%, 100% { background-position: 100% 0; }
+  50%      { background-position: 0% 0; }
+}
+@keyframes glow-blue {
   0%, 100% { filter: drop-shadow(0 0 5px rgba(78, 161, 255, 0.25)); }
   50%      { filter: drop-shadow(0 0 14px rgba(78, 161, 255, 0.55)); }
 }
+@keyframes glow-ember {
+  0%   { filter: drop-shadow(0 0 6px rgba(255, 90, 31, 0.45)); }
+  20%  { filter: drop-shadow(0 0 11px rgba(255, 120, 40, 0.75)); }
+  45%  { filter: drop-shadow(0 0 5px rgba(255, 90, 31, 0.35)); }
+  70%  { filter: drop-shadow(0 0 13px rgba(255, 150, 60, 0.7)); }
+  85%  { filter: drop-shadow(0 0 7px rgba(255, 90, 31, 0.5)); }
+}
+@keyframes glow-neon {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(57, 255, 176, 0.5)); }
+  50%      { filter: drop-shadow(0 0 16px rgba(57, 255, 176, 0.95)); }
+}
+@keyframes glow-ice {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(150, 205, 255, 0.3)); }
+  50%      { filter: drop-shadow(0 0 16px rgba(150, 205, 255, 0.6)); }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  #header, #header .logo { animation: none; }
+  #hero .logo, #hero #logo-wrap { animation: none !important; }
+}
+
+/* System info: two columns */
+#info {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  column-gap: 24px;
+  font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono", monospace;
+  font-size: 14px;
+  line-height: 1.4;
+}
+#hero.info-hidden #info { display: none; }
+
+.info-row { white-space: pre-wrap; overflow-wrap: anywhere; }
+.info-row.blank { min-height: 1.4em; }
+.info-label { color: #39c5cf; font-weight: bold; }
+.info-user { color: #3fb950; font-weight: bold; }
+.info-rule { color: var(--muted); }
+
+.palette {
+  display: grid;
+  grid-template-columns: repeat(8, 24px);
+  margin-top: 12px;
+}
+.palette span { height: 16px; display: block; }
+
+/* Narrow windows: one column */
+@media (max-width: 760px) {
+  #info { grid-template-columns: 1fr; }
+  .info-row.spacer { display: none; }
 }

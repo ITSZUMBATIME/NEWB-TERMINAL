@@ -36,22 +36,103 @@ const THEME = {
   brightWhite: "#ffffff",
 };
 
-// ---------- Opening banner (system info, like fastfetch) ----------
-let bannerShown = false;
+// ---------- Main screen: system info + logo styles ----------
+const heroEl = document.getElementById("hero");
+const toastEl = document.getElementById("logo-toast");
+const infoLeft = document.getElementById("info-left");
+const infoRight = document.getElementById("info-right");
 
-async function makeBanner() {
+function row(cls) {
+  const d = document.createElement("div");
+  d.className = "info-row" + (cls ? " " + cls : "");
+  return d;
+}
+
+function labelRow(label, value) {
+  const d = row();
+  const l = document.createElement("span");
+  l.className = "info-label";
+  l.textContent = label;
+  d.append(l, document.createTextNode(": " + value));
+  return d;
+}
+
+async function renderInfo() {
+  let info;
   try {
-    const info = await invoke("system_info");
-    const E = "\x1b[";
-    const title = `${E}1;32m${info.user}${E}0m@${E}1;32m${info.host}${E}0m`;
-    const rule = "-".repeat(info.user.length + 1 + info.host.length);
-    const rows = info.lines.map((l) => `${E}1;36m${l.label}${E}0m: ${l.value}`);
-    const normal = [40, 41, 42, 43, 44, 45, 46, 47].map((n) => `${E}${n}m   `).join("") + `${E}0m`;
-    const bright = [100, 101, 102, 103, 104, 105, 106, 107].map((n) => `${E}${n}m   `).join("") + `${E}0m`;
-    return [title, rule, ...rows, "", normal, bright, ""].join("\r\n") + "\r\n";
+    info = await invoke("system_info");
   } catch (_) {
-    return ""; // no banner is better than a broken start
+    return; // no info is better than a broken start
   }
+
+  // Left column: who you are + the system. Right column: the machine itself.
+  const split = info.lines.findIndex((l) => l.label === "Terminal");
+  const leftLines = split === -1 ? info.lines : info.lines.slice(0, split);
+  const rightLines = split === -1 ? [] : info.lines.slice(split);
+
+  const title = row();
+  const u = document.createElement("span");
+  u.className = "info-user";
+  u.textContent = info.user;
+  const h = document.createElement("span");
+  h.className = "info-user";
+  h.textContent = info.host;
+  title.append(u, document.createTextNode("@"), h);
+  const rule = row("info-rule");
+  rule.textContent = "-".repeat(info.user.length + 1 + info.host.length);
+
+  infoLeft.append(title, rule, ...leftLines.map((l) => labelRow(l.label, l.value)));
+
+  // Two blank rows line the right column up with the first info row.
+  infoRight.append(row("blank spacer"), row("blank spacer"), ...rightLines.map((l) => labelRow(l.label, l.value)));
+
+  const palette = document.createElement("div");
+  palette.className = "palette";
+  const keys = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"];
+  for (const k of keys) palette.append(Object.assign(document.createElement("span"), { style: `background:${THEME[k]}` }));
+  for (const k of keys) palette.append(Object.assign(document.createElement("span"), { style: `background:${THEME["bright" + k[0].toUpperCase() + k.slice(1)]}` }));
+  infoLeft.append(palette);
+}
+
+const LOGOS = [
+  { id: "shimmer", name: "Shimmer" },
+  { id: "ember", name: "Ember" },
+  { id: "neon", name: "Neon" },
+  { id: "frost", name: "Frost" },
+  { id: "plain", name: "Plain" },
+];
+let logoIndex = 0;
+let toastTimer = null;
+
+function saveSetting(key, value) {
+  try { localStorage.setItem(key, value); } catch (_) { /* fine */ }
+}
+function loadSetting(key) {
+  try { return localStorage.getItem(key); } catch (_) { return null; }
+}
+
+function setLogo(i, announce) {
+  logoIndex = (i + LOGOS.length) % LOGOS.length;
+  const logo = LOGOS[logoIndex];
+  heroEl.dataset.logo = logo.id;
+  saveSetting("akin.logo", logo.id);
+  if (announce) {
+    toastEl.textContent = `Logo style: ${logo.name} (${logoIndex + 1} of ${LOGOS.length}). Click the logo for the next one.`;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove("show"), 3000);
+  }
+}
+function cycleLogo() {
+  setLogo(logoIndex + 1, true);
+}
+
+function setInfoVisible(visible) {
+  heroEl.classList.toggle("info-hidden", !visible);
+  saveSetting("akin.info", visible ? "1" : "0");
+}
+function toggleInfo() {
+  setInfoVisible(heroEl.classList.contains("info-hidden"));
 }
 
 const tabs = []; // each: { id, term, fit, pane, tabEl, labelEl }
@@ -153,17 +234,22 @@ async function newTab() {
       if (sel) navigator.clipboard?.writeText(sel).catch(() => {});
       return false;
     }
+    if (k === "l") {
+      e.preventDefault();
+      cycleLogo();
+      return false;
+    }
+    if (k === "i") {
+      e.preventDefault();
+      toggleInfo();
+      return false;
+    }
     if (k === "v") {
       // Let the browser paste normally; xterm picks it up.
       return false;
     }
     return true;
   });
-
-  if (!bannerShown) {
-    bannerShown = true;
-    term.write(await makeBanner());
-  }
 
   await invoke("pty_spawn", { id, cols: term.cols, rows: term.rows });
   term.focus();
@@ -195,6 +281,12 @@ async function start() {
   await listen("pty-exit", (e) => closeTab(e.payload.id, true));
 
   newTabBtn.addEventListener("click", newTab);
+  document.querySelector("#hero .logo").addEventListener("click", cycleLogo);
+  document.getElementById("toggle-info").addEventListener("click", toggleInfo);
+  const savedLogo = LOGOS.findIndex((l) => l.id === loadSetting("akin.logo"));
+  setLogo(savedLogo === -1 ? 0 : savedLogo, false);
+  if (loadSetting("akin.info") === "0") setInfoVisible(false);
+  await renderInfo();
   new ResizeObserver(() => {
     const tab = activeTab();
     if (tab && tab.opened) fitAndResize(tab);
