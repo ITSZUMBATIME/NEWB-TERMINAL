@@ -2,21 +2,25 @@
 // them when it opens. Everything here is read-only and fails quietly: if a fact
 // can't be found, that line is just left out.
 
-use std::{fs, process::Command};
+use std::{
+    fs,
+    io::Read,
+    process::{Command, Stdio},
+    time::{Duration, Instant},
+};
 
 use serde::Serialize;
 
-#[derive(Serialize)]
-pub struct InfoLine {
-    label: String,
-    value: String,
-}
-
+/// What the window receives: ready-to-show lines (with colour codes), as fastfetch prints them.
 #[derive(Serialize)]
 pub struct SystemInfo {
-    user: String,
-    host: String,
-    lines: Vec<InfoLine>,
+    lines: Vec<String>,
+    source: String,
+}
+
+struct InfoLine {
+    label: String,
+    value: String,
 }
 
 fn line(label: &str, value: String) -> Option<InfoLine> {
@@ -155,8 +159,69 @@ fn disk() -> String {
     }
 }
 
-#[tauri::command]
-pub fn system_info() -> SystemInfo {
+/// Try the real `fastfetch` first: it knows far more about your system than we do,
+/// and it uses your own fastfetch settings. Returns None if it isn't installed.
+fn fastfetch_lines() -> Option<Vec<String>> {
+    let mut child = Command::new("fastfetch")
+        .args(["--logo", "none", "--pipe", "false"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+
+    // Never wait forever: if fastfetch hangs, give up and use the built-in info.
+    let start = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) => {
+                if start.elapsed() > Duration::from_secs(4) {
+                    let _ = child.kill();
+                    return None;
+                }
+                std::thread::sleep(Duration::from_millis(30));
+            }
+            Err(_) => return None,
+        }
+    }
+
+    let mut out = String::new();
+    child.stdout.take()?.read_to_string(&mut out).ok()?;
+
+    // Keep colours (ESC [ ... m) but drop every other terminal control code.
+    let mut clean = String::with_capacity(out.len());
+    let mut chars = out.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' && chars.peek() == Some(&'[') {
+            let mut seq = String::from("\x1b[");
+            chars.next();
+            let mut last = ' ';
+            for n in chars.by_ref() {
+                seq.push(n);
+                last = n;
+                if n.is_ascii_alphabetic() || n == '~' {
+                    break;
+                }
+            }
+            if last == 'm' {
+                clean.push_str(&seq);
+            }
+        } else if c != '\r' {
+            clean.push(c);
+        }
+    }
+
+    let lines: Vec<String> = clean.lines().map(|l| l.to_string()).collect();
+    if lines.iter().filter(|l| l.contains(": ")).count() >= 3 {
+        Some(lines)
+    } else {
+        None
+    }
+}
+
+/// Smaller built-in version, used when fastfetch isn't installed.
+fn builtin_lines() -> Vec<String> {
     let user = std::env::var("USER").unwrap_or_else(|_| "user".into());
     let host = read("/proc/sys/kernel/hostname").trim().to_string();
     let shell = std::env::var("SHELL").unwrap_or_default();
@@ -170,19 +235,50 @@ pub fn system_info() -> SystemInfo {
         _ => String::new(),
     };
 
-    let mut lines: Vec<InfoLine> = Vec::new();
-    lines.extend(line("OS", os_name()));
-    lines.extend(line("Kernel", read("/proc/sys/kernel/osrelease")));
-    lines.extend(line("Uptime", uptime()));
-    lines.extend(line("Shell", shell));
-    lines.extend(line("Desktop", desktop));
-    lines.extend(line("Terminal", format!("AKIN {}", env!("CARGO_PKG_VERSION"))));
-    lines.extend(line("CPU", cpu()));
+    let mut items: Vec<InfoLine> = Vec::new();
+    items.extend(line("OS", os_name()));
+    items.extend(line("Kernel", read("/proc/sys/kernel/osrelease")));
+    items.extend(line("Uptime", uptime()));
+    items.extend(line("Shell", shell));
+    items.extend(line("Desktop", desktop));
+    items.extend(line("Terminal", format!("AKIN {}", env!("CARGO_PKG_VERSION"))));
+    items.extend(line("CPU", cpu()));
     for (i, g) in gpus().into_iter().enumerate() {
-        lines.extend(line(&format!("GPU {}", i + 1), g));
+        items.extend(line(&format!("GPU {}", i + 1), g));
     }
-    lines.extend(line("Memory", memory()));
-    lines.extend(line("Disk (/)", disk()));
+    items.extend(line("Memory", memory()));
+    items.extend(line("Disk (/)", disk()));
 
-    SystemInfo { user, host, lines }
+    let mut lines = vec![
+        format!("\x1b[1m{user}\x1b[0m@\x1b[1m{host}\x1b[0m"),
+        "-".repeat(user.len() + 1 + host.len()),
+    ];
+    for i in items {
+        lines.push(format!("\x1b[1;34m{}\x1b[0m: {}", i.label, i.value));
+    }
+    lines
+}
+
+fn gather() -> SystemInfo {
+    match fastfetch_lines() {
+        Some(lines) => SystemInfo {
+            lines,
+            source: "fastfetch".into(),
+        },
+        None => SystemInfo {
+            lines: builtin_lines(),
+            source: "builtin".into(),
+        },
+    }
+}
+
+// `async` keeps the window responsive while we wait for fastfetch.
+#[tauri::command]
+pub async fn system_info() -> SystemInfo {
+    tauri::async_runtime::spawn_blocking(gather)
+        .await
+        .unwrap_or(SystemInfo {
+            lines: Vec::new(),
+            source: "none".into(),
+        })
 }

@@ -1,6 +1,6 @@
 // AKIN: the window side.
 // Shows a terminal (xterm.js) for each tab and connects it to a real shell
-// that the Rust side runs.
+// that the Rust side runs. Also draws the logo and the system info.
 
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -8,101 +8,15 @@ import "@xterm/xterm/css/xterm.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "./style.css";
+import { THEME } from "./theme.js";
+import { buildModel, renderWeb, flowText } from "./info.js";
+import { AsciiLogo, ASCII_STYLES } from "./asciilogo.js";
 
 const tabsEl = document.getElementById("tabs");
 const panesEl = document.getElementById("panes");
 const newTabBtn = document.getElementById("new-tab");
 
-const THEME = {
-  background: "#14161a",
-  foreground: "#c8ccd4",
-  cursor: "#c8ccd4",
-  selectionBackground: "#3a4150",
-  black: "#1b1e24",
-  red: "#e5484d",
-  green: "#3fb950",
-  yellow: "#e0a63a",
-  blue: "#4ea1ff",
-  magenta: "#b57bee",
-  cyan: "#39c5cf",
-  white: "#c8ccd4",
-  brightBlack: "#5b616b",
-  brightRed: "#ff6369",
-  brightGreen: "#56d364",
-  brightYellow: "#f2c14e",
-  brightBlue: "#79b8ff",
-  brightMagenta: "#d2a8ff",
-  brightCyan: "#56d4dd",
-  brightWhite: "#ffffff",
-};
-
-// ---------- Main screen: system info + logo styles ----------
-const heroEl = document.getElementById("hero");
-const toastEl = document.getElementById("logo-toast");
-const infoLeft = document.getElementById("info-left");
-const infoRight = document.getElementById("info-right");
-
-function row(cls) {
-  const d = document.createElement("div");
-  d.className = "info-row" + (cls ? " " + cls : "");
-  return d;
-}
-
-function labelRow(label, value) {
-  const d = row();
-  const l = document.createElement("span");
-  l.className = "info-label";
-  l.textContent = label;
-  d.append(l, document.createTextNode(": " + value));
-  return d;
-}
-
-async function renderInfo() {
-  let info;
-  try {
-    info = await invoke("system_info");
-  } catch (_) {
-    return; // no info is better than a broken start
-  }
-
-  // Left column: who you are + the system. Right column: the machine itself.
-  const split = info.lines.findIndex((l) => l.label === "Terminal");
-  const leftLines = split === -1 ? info.lines : info.lines.slice(0, split);
-  const rightLines = split === -1 ? [] : info.lines.slice(split);
-
-  const title = row();
-  const u = document.createElement("span");
-  u.className = "info-user";
-  u.textContent = info.user;
-  const h = document.createElement("span");
-  h.className = "info-user";
-  h.textContent = info.host;
-  title.append(u, document.createTextNode("@"), h);
-  const rule = row("info-rule");
-  rule.textContent = "-".repeat(info.user.length + 1 + info.host.length);
-
-  infoLeft.append(title, rule, ...leftLines.map((l) => labelRow(l.label, l.value)));
-
-  // Two blank rows line the right column up with the first info row.
-  infoRight.append(row("blank spacer"), row("blank spacer"), ...rightLines.map((l) => labelRow(l.label, l.value)));
-
-  const palette = document.createElement("div");
-  palette.className = "palette";
-  const keys = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"];
-  for (const k of keys) palette.append(Object.assign(document.createElement("span"), { style: `background:${THEME[k]}` }));
-  for (const k of keys) palette.append(Object.assign(document.createElement("span"), { style: `background:${THEME["bright" + k[0].toUpperCase() + k.slice(1)]}` }));
-  infoLeft.append(palette);
-}
-
-const LOGOS = [
-  { id: "shimmer", name: "Shimmer" },
-  { id: "ember", name: "Ember" },
-  { id: "neon", name: "Neon" },
-  { id: "frost", name: "Frost" },
-  { id: "plain", name: "Plain" },
-];
-let logoIndex = 0;
-let toastTimer = null;
+/* ---------- Small helpers for remembering settings ---------- */
 
 function saveSetting(key, value) {
   try { localStorage.setItem(key, value); } catch (_) { /* fine */ }
@@ -111,31 +25,84 @@ function loadSetting(key) {
   try { return localStorage.getItem(key); } catch (_) { return null; }
 }
 
+/* ---------- Main screen: logo + system info ---------- */
+
+const heroEl = document.getElementById("hero");
+const toastEl = document.getElementById("logo-toast");
+const asciiLogo = new AsciiLogo(document.getElementById("ascii-logo"));
+
+let toastTimer = null;
+function toast(message) {
+  toastEl.textContent = message;
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 3500);
+}
+
+// Logo styles. "plain" and "shimmer" are the traced shape; the others are drawn from characters.
+const LOGOS = [
+  { id: "plain", name: "Plain" },
+  { id: "shade", name: "ASCII Shade" },
+  { id: "code", name: "ASCII Code" },
+  { id: "dots", name: "Dot Matrix" },
+  { id: "shimmer", name: "Shimmer" },
+];
+let logoIndex = 0;
+
 function setLogo(i, announce) {
   logoIndex = (i + LOGOS.length) % LOGOS.length;
   const logo = LOGOS[logoIndex];
   heroEl.dataset.logo = logo.id;
+  asciiLogo.setStyle(ASCII_STYLES.includes(logo.id) ? logo.id : null);
   saveSetting("akin.logo", logo.id);
-  if (announce) {
-    toastEl.textContent = `Logo style: ${logo.name} (${logoIndex + 1} of ${LOGOS.length}). Click the logo for the next one.`;
-    toastEl.classList.add("show");
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toastEl.classList.remove("show"), 3000);
-  }
+  if (announce) toast(`Logo style: ${logo.name} (${logoIndex + 1} of ${LOGOS.length}). Click the logo for the next one.`);
 }
 function cycleLogo() {
   setLogo(logoIndex + 1, true);
 }
 
-function setInfoVisible(visible) {
-  heroEl.classList.toggle("info-hidden", !visible);
-  saveSetting("akin.info", visible ? "1" : "0");
+// Layouts for the system info.
+const LAYOUTS = [
+  { id: "flow", name: "Flow", hint: "info prints at the top of each new tab and scrolls away. Press Ctrl+Shift+T to see it." },
+  { id: "header", name: "Header", hint: "info pinned under the logo." },
+  { id: "centred", name: "Centred", hint: "info pinned and centred under the logo." },
+  { id: "off", name: "Off", hint: "logo only." },
+];
+let layoutIndex = 0;
+let infoModel = null;
+let infoPromise = null;
+
+const infoEls = {
+  title: document.getElementById("info-title"),
+  left: document.getElementById("info-left"),
+  right: document.getElementById("info-right"),
+  palette: document.getElementById("palette"),
+};
+
+function setLayout(i, announce) {
+  layoutIndex = (i + LAYOUTS.length) % LAYOUTS.length;
+  const layout = LAYOUTS[layoutIndex];
+  heroEl.dataset.layout = layout.id;
+  saveSetting("akin.layout", layout.id);
+  if (announce) toast(`Layout: ${layout.name} (${layoutIndex + 1} of ${LAYOUTS.length}): ${layout.hint}`);
 }
-function toggleInfo() {
-  setInfoVisible(heroEl.classList.contains("info-hidden"));
+function cycleLayout() {
+  setLayout(layoutIndex + 1, true);
 }
 
-const tabs = []; // each: { id, term, fit, pane, tabEl, labelEl }
+async function loadInfo() {
+  try {
+    const info = await invoke("system_info");
+    infoModel = buildModel(info.lines);
+    renderWeb(infoModel, infoEls);
+  } catch (_) {
+    infoModel = null; // no info is better than a broken start
+  }
+}
+
+/* ---------- Tabs ---------- */
+
+const tabs = []; // each: { id, term, fit, pane, tabEl, labelEl, opened }
 let activeId = null;
 let nextId = 1;
 
@@ -241,7 +208,7 @@ async function newTab() {
     }
     if (k === "i") {
       e.preventDefault();
-      toggleInfo();
+      cycleLayout();
       return false;
     }
     if (k === "v") {
@@ -250,6 +217,12 @@ async function newTab() {
     }
     return true;
   });
+
+  // Flow layout: print the system info at the top of the tab, above the prompt.
+  if (heroEl.dataset.layout === "flow") {
+    await infoPromise;
+    if (infoModel) term.write(flowText(infoModel, term.cols));
+  }
 
   await invoke("pty_spawn", { id, cols: term.cols, rows: term.rows });
   term.focus();
@@ -282,16 +255,20 @@ async function start() {
 
   newTabBtn.addEventListener("click", newTab);
   document.querySelector("#hero .logo").addEventListener("click", cycleLogo);
-  document.getElementById("toggle-info").addEventListener("click", toggleInfo);
+  document.getElementById("ascii-logo").addEventListener("click", cycleLogo);
+  document.getElementById("toggle-info").addEventListener("click", cycleLayout);
+
   const savedLogo = LOGOS.findIndex((l) => l.id === loadSetting("akin.logo"));
   setLogo(savedLogo === -1 ? 0 : savedLogo, false);
-  if (loadSetting("akin.info") === "0") setInfoVisible(false);
-  await renderInfo();
+  const savedLayout = LAYOUTS.findIndex((l) => l.id === loadSetting("akin.layout"));
+  setLayout(savedLayout === -1 ? 0 : savedLayout, false);
+
   new ResizeObserver(() => {
     const tab = activeTab();
     if (tab && tab.opened) fitAndResize(tab);
   }).observe(panesEl);
 
+  infoPromise = loadInfo();
   await newTab();
 }
 

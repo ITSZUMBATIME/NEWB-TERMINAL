@@ -10,14 +10,23 @@
       <div id="tabbar">
         <div id="tabs"></div>
         <button id="new-tab" title="New tab (Ctrl+Shift+T)">+</button>
-        <button id="toggle-info" title="Show or hide system info (Ctrl+Shift+I)">&#9432;</button>
+        <button id="toggle-info" title="Change the system info layout (Ctrl+Shift+I)">&#9432;</button>
       </div>
-      <div id="hero" data-logo="shimmer">
-        <div id="logo-wrap"><div class="logo" role="img" aria-label="AKIN" title="Click to try another logo style"></div></div>
+      <div id="hero" data-logo="plain" data-layout="flow">
+        <div id="logo-wrap">
+          <div class="logo" role="img" aria-label="AKIN" title="Click to try another logo style"></div>
+          <canvas id="ascii-logo" title="Click to try another logo style"></canvas>
+        </div>
         <div id="logo-toast"></div>
         <div id="info">
-          <div class="col" id="info-left"></div>
-          <div class="col" id="info-right"></div>
+          <div id="info-inner">
+            <div id="info-title"></div>
+            <div id="info-cols">
+              <div class="col" id="info-left"></div>
+              <div class="col" id="info-right"></div>
+            </div>
+            <div id="palette" class="palette"></div>
+          </div>
         </div>
       </div>
       <div id="panes"></div>
