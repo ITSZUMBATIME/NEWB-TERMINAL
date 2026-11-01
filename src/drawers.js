@@ -1,16 +1,14 @@
-// The right-hand slide-over panel. It has two sub-menus:
-//   Cheat sheet: commands in branching groups, like folders in a file explorer
-//                (Update > Application updates > Update Flatpak apps ...), plus your favourites.
-//   Discover:    the plain-English "what do you want to do?" list, with search.
+// The right-hand slide-over panel: your commands, in branching groups like folders in a
+// file explorer (Update > Application updates > Update Flatpak apps ...), plus your favourites.
+// The search box understands everyday words ("delete a file", "duplicate", "wifi").
 // Commands can be dragged onto the terminal. Dropping types the command for you to check;
 // it never presses Enter. Dropping onto "Favourites" pins it.
 
-import { CATEGORIES, TREE, ESSENTIALS, KEYS, lookup, lookupTree } from "./commands.js";
+import { TREE, ESSENTIALS, KEYS, lookup, lookupTree, hintsFor, flattenTree } from "./commands.js";
 import { el, cmdElement } from "./ui.js";
 
 const FAV_KEY = "akin.favs.v1";
 const OPEN_KEY = "akin.tree.v1";
-const TAB_KEY = "akin.rtab.v1";
 const FAV_ID = "Favourites";
 
 function load(key, fallback) {
@@ -27,48 +25,74 @@ function save(key, value) {
 
 const infoFor = (cmd) => lookupTree(cmd) || lookup(cmd);
 
+/* ---------- Search that understands everyday words ---------- */
+
+// Little words that don't help find anything.
+const STOP = new Set(["a", "an", "the", "to", "my", "me", "i", "how", "do", "does", "want", "can", "you", "of", "in", "on", "and", "or", "for", "with", "some", "is", "it", "this", "that", "what", "where", "when", "please", "need", "like", "not", "working", "fix", "problem", "broken", "help", "just", "cant", "wont", "cannot", "doesnt", "isnt"]);
+
+// Words that mean nearly the same thing, so "delete" also finds "remove".
+const SYNONYMS = {
+  delete: ["remove", "erase", "rm"], erase: ["delete", "remove"], remove: ["delete", "uninstall", "erase"], uninstall: ["remove"],
+  folder: ["directory", "dir"], directory: ["folder"], copy: ["duplicate", "cp"], duplicate: ["copy"],
+  rename: ["move", "mv"], move: ["rename", "mv"], find: ["search", "locate"], search: ["find", "grep"],
+  look: ["see", "show", "list"], list: ["show", "ls"], see: ["show", "list", "view"], show: ["see", "list", "view"],
+  open: ["edit", "view"], install: ["add", "get"], add: ["install"], update: ["upgrade"], upgrade: ["update"],
+  internet: ["network", "online", "wifi", "connection"], wifi: ["network", "wireless"], online: ["internet", "network"],
+  space: ["disk", "storage"], storage: ["disk", "space"], memory: ["ram"], ram: ["memory"],
+  stop: ["kill", "end", "quit"], kill: ["stop", "end"], close: ["exit", "quit"], quit: ["exit", "stop"],
+  download: ["get", "fetch", "clone"], undo: ["restore", "revert", "reset"], save: ["commit", "write"],
+  password: ["sudo", "passwd"], admin: ["sudo", "root"], read: ["view", "show", "cat"], make: ["create", "new"],
+  create: ["make", "new", "mkdir", "touch"], new: ["create", "make"], zip: ["archive", "compress", "tar"], unzip: ["extract", "unpack"],
+  restart: ["reboot"], reboot: ["restart"], shutdown: ["power"], computer: ["system", "machine"],
+};
+
+const withoutPlural = (w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w);
+
+/** Exact: every word you typed appears (plurals count). */
+function matchesExactly(haystack, words) {
+  return words.every((w) => haystack.includes(w) || haystack.includes(withoutPlural(w)));
+}
+
+/** Loose: every word, or a word that means nearly the same, appears. */
+function matchesLoosely(haystack, words) {
+  return words.every((w) => {
+    const forms = [w, withoutPlural(w)];
+    for (const f of [...forms]) forms.push(...(SYNONYMS[f] || []));
+    return forms.some((f) => haystack.includes(f));
+  });
+}
+
+function queryWords(text) {
+  const all = text.toLowerCase().split(/[^a-z0-9.+_-]+/).filter(Boolean);
+  const words = all.filter((w) => !STOP.has(w));
+  return words.length ? words : all; // if every word was a little word, use them anyway
+}
+
 /**
  * options: { onInsert(cmd, risky), toast(msg), focusTerminal(), panesEl, dragger }
- * returns { toggle(), open(tab), close(), closeInstant(), isOpen() }
+ * returns { toggle(), open(), close(), closeInstant(), isOpen(), addFav(cmd) }
  */
-export function initDrawers({ onInsert, toast, focusTerminal, panesEl, dragger }) {
+export function initDrawers({ toast, focusTerminal, panesEl, dragger }) {
   const drawer = document.getElementById("drawer-cheats");
   const button = document.getElementById("open-cheats");
   const treeBody = document.getElementById("cheat-body");
   const treeFilter = document.getElementById("tree-filter");
-  const discoverList = document.getElementById("discover-list");
-  const search = document.getElementById("discover-search");
-  const subtabs = [...drawer.querySelectorAll(".subtab")];
-  const panels = { tree: document.getElementById("panel-tree"), discover: document.getElementById("panel-discover") };
 
   let favs = load(FAV_KEY, []).filter((x) => typeof x === "string");
   let openIds = new Set(load(OPEN_KEY, [FAV_ID]));
-  let tab = load(TAB_KEY, "tree");
-  if (!panels[tab]) tab = "tree";
 
-  /* ---------- Opening, closing, sub-menus ---------- */
+  /* ---------- Opening and closing ---------- */
 
   const isOpen = () => drawer.classList.contains("open");
 
-  function showTab(name, focus) {
-    tab = name;
-    save(TAB_KEY, name);
-    for (const b of subtabs) b.classList.toggle("on", b.dataset.tab === name);
-    for (const [k, p] of Object.entries(panels)) p.hidden = k !== name;
-    if (focus) {
-      const input = name === "discover" ? search : treeFilter;
-      setTimeout(() => {
-        input.focus();
-        input.select();
-      }, 120);
-    }
-  }
-
-  function open(name) {
+  function open() {
     drawer.classList.add("open");
     drawer.setAttribute("aria-hidden", "false");
     button.classList.add("active");
-    showTab(name || tab, true);
+    setTimeout(() => {
+      treeFilter.focus();
+      treeFilter.select(); // typing replaces whatever you searched last time
+    }, 120);
   }
   function close() {
     if (!isOpen()) return;
@@ -90,18 +114,15 @@ export function initDrawers({ onInsert, toast, focusTerminal, panesEl, dragger }
 
   button.addEventListener("click", toggle);
   drawer.querySelector(".drawer-close").addEventListener("click", close);
-  for (const b of subtabs) b.addEventListener("click", () => showTab(b.dataset.tab, true));
 
   // Shortcuts when the keyboard is NOT in the terminal (the terminal has its own handler).
   window.addEventListener("keydown", (e) => {
     if (e.target.closest?.(".xterm")) return;
     const k = e.key.toLowerCase();
-    if (e.ctrlKey && e.shiftKey && k === "s") {
+    if (e.ctrlKey && e.shiftKey && (k === "s" || k === "d")) {
       e.preventDefault();
-      toggle();
-    } else if (e.ctrlKey && e.shiftKey && k === "d") {
-      e.preventDefault();
-      open("discover");
+      if (k === "d") open();
+      else toggle();
     } else if (e.key === "Escape" && drawer.contains(e.target)) {
       close();
     }
@@ -152,17 +173,20 @@ export function initDrawers({ onInsert, toast, focusTerminal, panesEl, dragger }
     return star;
   }
 
-  /* ---------- Cheat sheet tree ---------- */
+  /* ---------- The tree ---------- */
 
   function leaf(item, depth, { removable = false } = {}) {
     const row = el("div", "tn-leaf");
     row.dataset.cmd = item.cmd;
     if (item.risky) row.dataset.risky = "1";
-    row.dataset.search = `${item.name || item.title || ""} ${item.cmd} ${item.why || ""} ${(item.trail || []).join(" ")}`.toLowerCase();
+    const name = item.name || item.title || item.cmd;
+    // Everything a person might type to find this: its name, the command, the explanation,
+    // the groups it sits in, and the everyday wording from the old Discover list.
+    row.dataset.search = `${name} ${item.cmd} ${item.why || ""} ${(item.trail || []).join(" ")} ${hintsFor(item.cmd)}`.toLowerCase();
     row.style.setProperty("--d", depth);
 
     const line = el("div", "tn-line");
-    line.append(el("span", "tn-name", item.name || item.title || item.cmd));
+    line.append(el("span", "tn-name", name));
     if (item.risky) line.append(el("span", "tag", "careful"));
     if (removable) {
       const x = el("button", "unpin", "×");
@@ -201,19 +225,18 @@ export function initDrawers({ onInsert, toast, focusTerminal, panesEl, dragger }
     return wrap;
   }
 
+  function countLeaves(node) {
+    return node.children.reduce((n, ch) => n + (ch.children ? countLeaves(ch) : 1), 0);
+  }
+
   function groupNode(node, depth, trail) {
     const id = [...trail, node.name].join(" > ");
-    const total = countLeaves(node);
     return branch(id, node.name, depth, (kids) => {
       for (const child of node.children) {
         if (child.children) kids.append(groupNode(child, depth + 1, [...trail, node.name]));
         else kids.append(leaf({ ...child, trail: [...trail, node.name] }, depth + 1));
       }
-    }, { count: total });
-  }
-
-  function countLeaves(node) {
-    return node.children.reduce((n, ch) => n + (ch.children ? countLeaves(ch) : 1), 0);
+    }, { count: countLeaves(node) });
   }
 
   function renderFavs() {
@@ -230,7 +253,7 @@ export function initDrawers({ onInsert, toast, focusTerminal, panesEl, dragger }
       kids.append(el("div", "empty", "Star a command, or drag one here, to keep it handy."));
     }
     node.querySelector(".tn-count").textContent = String(favs.length);
-    applyFilter();
+    if (treeFilter.value.trim()) applyFilter();
   }
 
   function renderTree() {
@@ -241,10 +264,7 @@ export function initDrawers({ onInsert, toast, focusTerminal, panesEl, dragger }
 
     treeBody.append(
       branch("Essentials", "Essentials", 0, (kids) => {
-        for (const cmd of ESSENTIALS) {
-          const info = infoFor(cmd) || { name: cmd, cmd };
-          kids.append(leaf(info, 1));
-        }
+        for (const cmd of ESSENTIALS) kids.append(leaf(infoFor(cmd) || { name: cmd, cmd }, 1));
       }, { count: ESSENTIALS.length, extraClass: "top" }),
     );
 
@@ -264,48 +284,63 @@ export function initDrawers({ onInsert, toast, focusTerminal, panesEl, dragger }
       }, { count: KEYS.length, extraClass: "top" }),
     );
 
-    treeBody.append(el("div", "empty tree-none", "Nothing matches. Try different words, like \"update\", \"copy\" or \"git\"."));
-    treeBody.querySelector(".tree-none").hidden = true;
     refreshStars();
   }
 
-  // Filtering: show only matching commands, with the groups that hold them opened up.
+  // Search: a ranked list. Exact matches come first, then ones that only match by similar words
+  // ("delete" also finds "remove"). Each result shows the group it lives in.
+  const resultsBody = document.getElementById("cheat-results");
+  const tools = document.querySelector(".tree-tools");
+  const allLeaves = flattenTree().map((item) => ({
+    item,
+    hay: `${item.name} ${item.cmd} ${item.why || ""} ${item.trail.join(" ")} ${hintsFor(item.cmd)}`.toLowerCase(),
+    nameHay: `${item.name} ${hintsFor(item.cmd)}`.toLowerCase(),
+  }));
+  const MAX_RESULTS = 40;
+
   function applyFilter() {
-    const words = treeFilter.value.toLowerCase().split(/\s+/).filter(Boolean);
-    treeBody.classList.toggle("filtering", words.length > 0);
-    let any = false;
+    const text = treeFilter.value.trim();
+    const words = text ? queryWords(text) : [];
+    const searching = words.length > 0;
+    treeBody.hidden = searching;
+    resultsBody.hidden = !searching;
+    tools.hidden = searching;
+    if (!searching) return;
 
-    const visit = (node) => {
-      let shown = 0;
-      for (const kid of node.querySelector(":scope > .tn-kids").children) {
-        if (kid.classList.contains("tn-leaf")) {
-          const hit = words.every((w) => kid.dataset.search.includes(w));
-          kid.hidden = !hit;
-          if (hit) shown++;
-        } else if (kid.classList.contains("tn-branch")) {
-          shown += visit(kid);
-        }
-      }
-      node.hidden = words.length > 0 && shown === 0;
-      return shown;
-    };
-
-    for (const top of treeBody.querySelectorAll(":scope > .tn-branch")) {
-      if (!words.length) {
-        top.hidden = false;
-        for (const x of top.querySelectorAll("[hidden]")) if (!x.classList.contains("tree-none")) x.hidden = false;
-        any = true;
-        continue;
-      }
-      // Skip the plain key list when filtering.
-      if (top.dataset.id === "Handy keys") {
-        top.hidden = true;
-        continue;
-      }
-      if (visit(top) > 0) any = true;
+    const scored = [];
+    for (const entry of allLeaves) {
+      let score = 0;
+      if (matchesExactly(entry.hay, words)) score = matchesExactly(entry.nameHay, words) ? 4 : 3; // in the name counts most
+      else if (matchesLoosely(entry.hay, words)) score = matchesLoosely(entry.nameHay, words) ? 2 : 1;
+      if (score) scored.push({ ...entry, score });
     }
-    const none = treeBody.querySelector(".tree-none"); // not there yet while the tree is first being built
-    if (none) none.hidden = any || !words.length;
+    scored.sort((x, y) => y.score - x.score); // stable: ties keep their order in the tree
+
+    // Nothing matched every word? Offer the commands that match the most words.
+    let closest = false;
+    if (!scored.length) {
+      for (const entry of allLeaves) {
+        const n = words.filter((w) => matchesLoosely(entry.hay, [w])).length;
+        if (n) scored.push({ ...entry, score: n });
+      }
+      scored.sort((x, y) => y.score - x.score);
+      closest = scored.length > 0;
+    }
+
+    resultsBody.replaceChildren();
+    if (closest) resultsBody.append(el("div", "empty", "No exact match. These are the closest ideas:"));
+    for (const r of scored.slice(0, MAX_RESULTS)) {
+      const row = leaf(r.item, 0);
+      row.classList.add("result");
+      row.append(el("div", "tn-trail", r.item.trail.join("  ›  ")));
+      resultsBody.append(row);
+    }
+    if (!scored.length) {
+      resultsBody.append(el("div", "empty", "Nothing matches. Try different words, like \"update\", \"copy\" or \"git\"."));
+    } else if (scored.length > MAX_RESULTS) {
+      resultsBody.append(el("div", "empty", `Showing the best ${MAX_RESULTS} of ${scored.length}. Add a word to narrow it down.`));
+    }
+    refreshStars();
   }
   treeFilter.addEventListener("input", applyFilter);
 
@@ -322,64 +357,11 @@ export function initDrawers({ onInsert, toast, focusTerminal, panesEl, dragger }
     save(OPEN_KEY, [...openIds]);
   });
 
-  /* ---------- Discover ---------- */
-
-  function renderDiscover() {
-    discoverList.replaceChildren();
-    for (const cat of CATEGORIES) {
-      const sec = el("section", "cat");
-      sec.append(el("h3", "cat-name", cat.name));
-      for (const item of cat.items) {
-        const card = el("div", "card");
-        card.dataset.cmd = item.cmd;
-        if (item.risky) card.dataset.risky = "1";
-        card.dataset.search = `${item.title} ${item.cmd} ${item.why} ${item.keys || ""} ${cat.name}`.toLowerCase();
-
-        const top = el("div", "card-top");
-        top.append(el("span", "card-title", item.title));
-        if (item.risky) top.append(el("span", "tag", "careful"));
-        top.append(starButton(item.cmd));
-
-        card.append(top, cmdElement(item.cmd), el("div", "card-why", item.why));
-        card.addEventListener("click", () => {
-          if (dragger.justDragged) return;
-          card.classList.toggle("open");
-        });
-        sec.append(card);
-      }
-      discoverList.append(sec);
-    }
-    const none = el("div", "empty", "Nothing matches. Try different words, like \"copy\", \"delete\" or \"folder\".");
-    none.id = "discover-none";
-    none.hidden = true;
-    discoverList.append(none);
-  }
-
-  function applySearch() {
-    const words = search.value.toLowerCase().split(/\s+/).filter(Boolean);
-    let anyShown = false;
-    for (const sec of discoverList.querySelectorAll(".cat")) {
-      let shown = 0;
-      for (const card of sec.querySelectorAll(".card")) {
-        const hit = words.every((w) => card.dataset.search.includes(w));
-        card.hidden = !hit;
-        if (hit) shown++;
-      }
-      sec.hidden = shown === 0;
-      if (shown) anyShown = true;
-    }
-    document.getElementById("discover-none").hidden = anyShown;
-  }
-  search.addEventListener("input", applySearch);
-
   /* ---------- Go ---------- */
 
   dragger.attach(treeBody);
-  dragger.attach(discoverList);
-
-  renderDiscover();
+  dragger.attach(resultsBody);
   renderTree();
-  showTab(tab, false);
 
   return { toggle, open, close, closeInstant, isOpen, addFav };
 }

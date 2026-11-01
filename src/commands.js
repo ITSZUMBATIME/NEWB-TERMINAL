@@ -1,5 +1,11 @@
 // The commands AKIN knows about, in plain English.
 //
+// There are two lists here:
+//   TREE (further down)  what you browse in the Commands panel.
+//   CATEGORIES (this one) the old "Discover" wording. It is no longer shown as its own list; its
+//                         everyday titles and keywords are used to make search understand you
+//                         (typing "duplicate a file" finds the copy commands).
+//
 // Blanks: write {{name}} where the person has to fill something in.
 //   "cp {{file}} {{to}}" drops in as "cp FILE TO" with FILE and TO highlighted.
 // risky: true means "this can delete or change things", so AKIN warns when it is dropped.
@@ -168,6 +174,7 @@ const c = (name, cmd, why, risky = false) => ({ name, cmd, why, risky });
 export const TREE = [
   g("Update",
     c("System update", "sudo dnf upgrade --refresh", "Checks for new versions of everything installed with DNF and installs them. It asks you to confirm first."),
+    c("Update everything (quick)", "sudo dnf upgrade", "Like System update, but skips refreshing the list of available software first. A bit faster."),
     g("Application updates",
       c("Update Flatpak apps", "flatpak update", "Updates the apps you installed from Flatpak (the app-store style apps)."),
       c("Check what's available", "dnf check-update", "Lists the updates waiting for you, without installing anything."),
@@ -289,6 +296,7 @@ export const TREE = [
 
   g("Your computer",
     g("About this computer",
+      c("Who am I?", "whoami", "Shows the name of the user you're logged in as."),
       c("Everything at a glance", "fastfetch", "Shows a summary of your computer, like the header at the top of AKIN."),
       c("Operating system version", "cat /etc/os-release", "Shows which Linux and which version you're running."),
       c("Kernel and machine details", "uname -a", "Prints the kernel version and your computer's name."),
@@ -403,6 +411,7 @@ export const TREE = [
       c("Edit a file (easy editor)", "nano {{file}}", "Opens a simple editor. The shortcuts are listed along the bottom. Ctrl+O saves, Ctrl+X quits."),
       c("Add a line to the end of a file", "echo \"{{text}}\" >> {{file}}", "Adds your text as a new last line. Existing content is kept."),
       c("Replace a file's contents", "echo \"{{text}}\" > {{file}}", "Writes your text into the file and erases what was there.", true),
+      c("Save a command's output to a file", "{{command}} > {{file}}", "The > sends what a command prints into a file instead of the screen. It replaces the file's contents.", true),
     ),
     g("Tidy and sort",
       c("Sort and remove duplicates", "sort {{file}} | uniq", "Prints the lines in order with repeated lines shown once."),
@@ -446,4 +455,10 @@ const byTreeCmd = new Map(flattenTree().map((n) => [n.cmd, n]));
 /** Find a tree command by its command text (or null). */
 export function lookupTree(cmd) {
   return byTreeCmd.get(cmd) || null;
+}
+
+/* Search hints: the old Discover titles and keywords, looked up by command. */
+const hintByCmd = new Map(CATEGORIES.flatMap((cat) => cat.items.map((i) => [i.cmd, `${i.title} ${i.keys || ""}`])));
+export function hintsFor(cmd) {
+  return hintByCmd.get(cmd) || "";
 }

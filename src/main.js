@@ -13,6 +13,7 @@ import { buildModel, renderWeb } from "./info.js";
 import { printBanner } from "./banner.js";
 import { initDrawers } from "./drawers.js";
 import { initExplorer } from "./explorer.js";
+import { initDisplay } from "./display.js";
 import { createDragger } from "./drag.js";
 import { shellPath } from "./ui.js";
 import { parseSpec, startTemplate, handleTemplateKey, cancelTemplate, fillBlank, refresh as refreshTemplate } from "./template.js";
@@ -120,6 +121,7 @@ async function loadInfo() {
 /* ---------- Dropping commands into the terminal ---------- */
 
 let drawersApi = null;
+let display = null;
 let explorerApi = null;
 let homeDir = "";
 
@@ -205,7 +207,20 @@ function keepCursorInView(tab) {
 
 // Mouse wheel: scrolling down first slides the header away, then the terminal scrolls.
 // Scrolling up goes through the terminal's history first, then brings the header back.
+let lastWheelZoom = 0;
+function wheelZoom(e) {
+  e.preventDefault();
+  const now = performance.now();
+  if (now - lastWheelZoom < 120) return; // one step per notch, not a flood
+  lastWheelZoom = now;
+  display?.stepScale(e.deltaY < 0 ? 1 : -1);
+}
+
 function handleWheel(tab, e) {
+  if (e.ctrlKey) {
+    wheelZoom(e);
+    return false;
+  }
   const H = headerHeight();
   if (!H) return true;
   const screen = tab.term.element?.querySelector(".xterm-screen");
@@ -294,7 +309,7 @@ async function newTab() {
 
   const term = new Terminal({
     fontFamily: '"JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono", monospace',
-    fontSize: 14,
+    fontSize: display ? display.state.font : 14,
     cursorBlink: true,
     scrollback: 5000,
     theme: THEME,
@@ -339,6 +354,24 @@ async function newTab() {
   });
 
   term.attachCustomKeyEventHandler((e) => {
+    // Interface size: Ctrl +, Ctrl -, Ctrl 0
+    if (e.type === "keydown" && e.ctrlKey && !e.altKey && display) {
+      if (e.key === "=" || e.key === "+") {
+        e.preventDefault();
+        display.stepScale(1);
+        return false;
+      }
+      if (e.key === "-") {
+        e.preventDefault();
+        display.stepScale(-1);
+        return false;
+      }
+      if (e.key === "0" && !e.shiftKey) {
+        e.preventDefault();
+        display.resetScale();
+        return false;
+      }
+    }
     if (e.type !== "keydown" || !e.ctrlKey || !e.shiftKey) return true;
     const k = e.key.toLowerCase();
     if (k === "t") {
@@ -364,7 +397,7 @@ async function newTab() {
     }
     if (k === "d") {
       e.preventDefault();
-      drawersApi?.open("discover");
+      drawersApi?.open();
       return false;
     }
     if (k === "s") {
@@ -432,6 +465,37 @@ async function start() {
     if (t) t.term.write(e.payload.data);
   });
   await listen("pty-exit", (e) => closeTab(e.payload.id, true));
+
+  display = initDisplay({
+    toast,
+    onFontChange: (px) => {
+      for (const t of tabs) {
+        t.term.options.fontSize = px;
+        if (t.opened) fitAndResize(t);
+      }
+    },
+  });
+  // Ctrl + / - / 0 and Ctrl + wheel when the keyboard or mouse is NOT on the terminal.
+  window.addEventListener("keydown", (e) => {
+    if (e.target.closest?.(".xterm") || !e.ctrlKey || e.altKey) return;
+    if (e.key === "=" || e.key === "+") {
+      e.preventDefault();
+      display.stepScale(1);
+    } else if (e.key === "-") {
+      e.preventDefault();
+      display.stepScale(-1);
+    } else if (e.key === "0" && !e.shiftKey) {
+      e.preventDefault();
+      display.resetScale();
+    }
+  });
+  window.addEventListener(
+    "wheel",
+    (e) => {
+      if (e.ctrlKey && !e.target.closest?.(".xterm")) wheelZoom(e);
+    },
+    { passive: false },
+  );
 
   try { homeDir = await invoke("home_dir"); } catch (_) { /* paths just won't be shortened */ }
 

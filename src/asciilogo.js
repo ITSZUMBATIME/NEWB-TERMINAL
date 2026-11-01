@@ -142,7 +142,10 @@ export class AsciiLogo {
     this.cssW = rect.width;
     this.cssH = rect.height;
 
-    const cols = clamp(Math.round(rect.width / cfg.cell), 36, 140);
+    // Characters smaller than about 6.5 real pixels turn to mush, so when the interface is zoomed
+    // out, use fewer, larger characters.
+    const cell = Math.max(cfg.cell, 6.5 / dpr);
+    const cols = clamp(Math.round(rect.width / cell), 30, 140);
     const grid = await sampleLogo(cols, cfg.cellAspect, style !== "dots");
     const img = await loadImage();
     if (this.style !== style) return;
