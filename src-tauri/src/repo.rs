@@ -217,3 +217,82 @@ pub async fn git_summary(path: String) -> Result<GitSummary, String> {
         .await
         .map_err(|e| e.to_string())?
 }
+
+/* ---------- Making, renaming and deleting (from the right-click menu in Files and Repos) ---------- */
+
+fn check_name(name: &str) -> Result<(), String> {
+    if name.is_empty() || name == "." || name == ".." {
+        return Err("Type a name first.".to_string());
+    }
+    if name.contains('/') {
+        return Err("A name can't contain a slash (/).".to_string());
+    }
+    Ok(())
+}
+
+/// Make a new empty file inside `dir`. Returns its full path. Never replaces an existing file.
+#[tauri::command]
+pub async fn create_file(dir: String, name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        check_name(&name)?;
+        let path = Path::new(&dir).join(&name);
+        if path.exists() {
+            return Err(format!("\"{name}\" already exists here."));
+        }
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .map_err(|e| e.to_string())?;
+        Ok(path.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Make a new folder inside `dir`. Returns its full path.
+#[tauri::command]
+pub async fn create_folder(dir: String, name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        check_name(&name)?;
+        let path = Path::new(&dir).join(&name);
+        if path.exists() {
+            return Err(format!("\"{name}\" already exists here."));
+        }
+        fs::create_dir(&path).map_err(|e| e.to_string())?;
+        Ok(path.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Rename a file or folder (it stays in the same folder). Returns the new full path.
+#[tauri::command]
+pub async fn rename_path(path: String, new_name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        check_name(&new_name)?;
+        let from = Path::new(&path);
+        let parent = from.parent().ok_or_else(|| "Can't rename that.".to_string())?;
+        let to = parent.join(&new_name);
+        if to.exists() {
+            return Err(format!("\"{new_name}\" already exists here."));
+        }
+        fs::rename(from, &to).map_err(|e| e.to_string())?;
+        Ok(to.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Move a file or folder to the trash (it can be put back from there). Nothing is deleted for good.
+#[tauri::command]
+pub async fn trash_path(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if !Path::new(&path).exists() {
+            return Err("That is already gone.".to_string());
+        }
+        trash::delete(&path).map_err(|e| format!("Couldn't move it to the trash: {e}"))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}

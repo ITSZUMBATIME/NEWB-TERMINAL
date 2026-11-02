@@ -92,6 +92,7 @@ export function initContextMenu({ panesEl, getTerm, send, toast }) {
   // Our menu replaces the browser's (Back, Reload, Inspect...), which means nothing here.
   // Text boxes keep their normal menu so you can paste into them.
   document.addEventListener("contextmenu", (e) => {
+    if (e.defaultPrevented) return; // another panel (Files, Repos) already showed its own menu
     if (e.target.closest("input, textarea:not(.xterm-helper-textarea), .cm-editor")) return;
     e.preventDefault();
     if (!panesEl.contains(e.target)) {

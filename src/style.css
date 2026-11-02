@@ -758,3 +758,10 @@ html[data-panels="terminal"] .git-badge { font-weight: 400; }
 .modal-btn.danger { color: #ff6369; border-color: #5b2a2d; }
 html[data-panels="terminal"] .modal, html[data-panels="terminal"] .modal-btn { border-radius: 0; }
 html[data-panels="terminal"] .modal-btn.primary { background: #12261a; border-color: #1c3324; color: #7ee787; }
+
+/* Name box and right-click menu extras */
+.modal-input { box-sizing: border-box; width: 100%; margin: 0 0 14px 0; padding: 8px 10px; background: #0c0e11; border: 1px solid #2c313a; border-radius: 6px; color: var(--text); font: inherit; font-size: 13.5px; outline: none; user-select: text; -webkit-user-select: text; }
+.modal-input:focus { border-color: var(--accent); }
+html[data-panels="terminal"] .modal-input { border-radius: 0; }
+.ctx button.danger { color: #ff6369; }
+.ctx button.danger .ico { color: #ff6369; }

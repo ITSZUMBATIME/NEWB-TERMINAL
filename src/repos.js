@@ -33,6 +33,7 @@ export function initRepos({ list, addBtn, refreshBtn, fillTree, dragger, home, t
   const expand = (p) => (p === "~" ? home : p.startsWith("~/") ? home + p.slice(1) : p).replace(/\/+$/, "") || "/";
 
   let repos = []; // { path, name, summary, error, node, row, meta, kids, ctx }
+  const expandedByRepo = new Map(); // folders opened inside each project, kept when the list is redrawn
   let scanned = false;
   let refreshing = false;
   let gitMissingTold = false;
@@ -68,7 +69,7 @@ export function initRepos({ list, addBtn, refreshBtn, fillTree, dragger, home, t
 
   function makeContext(repo) {
     return {
-      expanded: new Set(), // folders opened inside this project
+      expanded: expandedByRepo.get(repo.path) || expandedByRepo.set(repo.path, new Set()).get(repo.path), // folders opened inside this project
       decorate(row, path, isDir) {
         row.querySelector(":scope > .git-badge")?.remove();
         const { code, dirChanged } = codeFor(repo, path.slice(repo.path.length + 1), isDir);
@@ -291,6 +292,22 @@ export function initRepos({ list, addBtn, refreshBtn, fillTree, dragger, home, t
     refresh: scan,
     noteSaved(path) {
       if (repos.some((r) => path.startsWith(`${r.path}/`))) refreshSummaries();
+    },
+    /** Something changed on disk: list the open projects again and open `dir` so it shows. */
+    refreshTrees(dir) {
+      for (const repo of repos) {
+        const inside = dir && (dir === repo.path || dir.startsWith(`${repo.path}/`));
+        if (inside) {
+          repo.ctx.expanded.add(dir);
+          if (!repo.row.classList.contains("open")) { // open the project so the new item shows
+            repo.row.classList.add("open");
+            if (!cfg.open.includes(repo.path)) cfg.open.push(repo.path);
+            save();
+          }
+        }
+        if (repo.row?.classList.contains("open")) fillTree(repo.kids, repo.path, 1, repo.ctx);
+      }
+      refreshSummaries();
     },
   };
 }

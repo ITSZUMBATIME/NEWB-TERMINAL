@@ -620,6 +620,25 @@ async function closeTab(id, alreadyExited = false) {
   }
 }
 
+// A file or folder was renamed in Files/Repos: open editor tabs follow it.
+function pathChanged(from, to) {
+  for (const t of tabs) {
+    if (isTerm(t) || !(t.path === from || t.path.startsWith(`${from}/`))) continue;
+    t.path = to + t.path.slice(from.length);
+    t.name = t.path.slice(t.path.lastIndexOf("/") + 1);
+    t.labelEl.textContent = t.name;
+    t.tabEl.title = t.path;
+  }
+}
+
+// A file or folder went to the trash: close its editor tabs (nothing left to save to).
+function pathTrashed(path) {
+  for (const t of tabs.filter((x) => !isTerm(x) && (x.path === path || x.path.startsWith(`${path}/`)))) {
+    t.dirty = false;
+    closeTab(t.id);
+  }
+}
+
 // The terminal that commands, paths and "cd" should go to. If you are in an editor, that is the
 // last terminal you used (we switch to it).
 function terminalForAction() {
@@ -734,6 +753,8 @@ async function start() {
       if (tab) typeText(`cd ${shellPath(path, homeDir, await cwdOf(tab))}`);
     },
     onOpenFile: openFile,
+    onPathChanged: pathChanged,
+    onPathTrashed: pathTrashed,
     toast,
   });
 

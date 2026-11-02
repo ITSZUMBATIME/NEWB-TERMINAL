@@ -222,6 +222,10 @@ pub fn run() {
             repo::write_text_file,
             repo::find_repos,
             repo::git_summary,
+            repo::create_file,
+            repo::create_folder,
+            repo::rename_path,
+            repo::trash_path,
             sysinfo::system_info
         ])
         .run(tauri::generate_context!())

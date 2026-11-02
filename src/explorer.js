@@ -5,7 +5,7 @@
 // By default it follows the folder your terminal is in.
 
 import { invoke } from "@tauri-apps/api/core";
-import { el } from "./ui.js";
+import { el, askText, askChoice, showMenu } from "./ui.js";
 import { fileIcon } from "./icons.js";
 import { initRepos } from "./repos.js";
 
@@ -25,10 +25,11 @@ const join = (dir, name) => (dir === "/" ? `/${name}` : `${dir}/${name}`);
 const parentOf = (p) => (p === "/" ? "/" : p.slice(0, p.lastIndexOf("/")) || "/");
 
 /**
- * options: { dragger, getActiveTabId(), onCd(path), onOpenFile(path), toast(msg) }
+ * options: { dragger, getActiveTabId(), onCd(path), onOpenFile(path), onPathChanged(from, to),
+ *            onPathTrashed(path), toast(msg) }
  * returns { toggle, open, close, isOpen, refresh, sync, noteSaved(path) }
  */
-export async function initExplorer({ dragger, getActiveTabId, onCd, onOpenFile, toast }) {
+export async function initExplorer({ dragger, getActiveTabId, onCd, onOpenFile, onPathChanged, onPathTrashed, toast }) {
   const root_ = document.getElementById("explorer");
   const workspace = document.getElementById("workspace");
   const tree = document.getElementById("fx-tree");
@@ -269,6 +270,99 @@ export async function initExplorer({ dragger, getActiveTabId, onCd, onOpenFile, 
   }
   setInterval(sync, 1200);
 
+  /* ---------- Right-click: new file, new folder, rename, move to trash ---------- */
+
+  const pretty = (p) => (p === home ? "~" : p.startsWith(`${home}/`) ? `~${p.slice(home.length)}` : p);
+
+  // Show a change straight away in both lists, and in the git letters.
+  function changed(dir) {
+    if (dir && dir.startsWith(`${root}/`) || dir === root) expanded.add(dir);
+    render();
+    repos.refreshTrees(dir);
+  }
+
+  async function makeNew(dir, kind) {
+    const isFile = kind === "file";
+    const name = await askText({
+      title: isFile ? "New file" : "New folder",
+      message: `It will be made in ${pretty(dir)}`,
+      okLabel: "Create",
+    });
+    if (!name) return;
+    try {
+      const path = await invoke(isFile ? "create_file" : "create_folder", { dir, name });
+      changed(dir);
+      if (isFile) onOpenFile(path);
+    } catch (err) {
+      toast(String(err), 5000);
+    }
+  }
+
+  async function renameItem(path, name) {
+    const next = await askText({ title: "Rename", message: `New name for "${name}"`, value: name, okLabel: "Rename" });
+    if (!next || next === name) return;
+    try {
+      const to = await invoke("rename_path", { path, newName: next });
+      onPathChanged(path, to);
+      changed(parentOf(path));
+    } catch (err) {
+      toast(String(err), 5000);
+    }
+  }
+
+  async function trashItem(path, name, isDir) {
+    const pick = await askChoice({
+      title: `Move "${name}" to the trash?`,
+      message: isDir ? "The folder and everything in it goes to the trash. You can put it back from there." : "You can put it back from the trash.",
+      choices: [
+        { id: "trash", label: "Move to trash", danger: true },
+        { id: "keep", label: "Keep it", primary: true, cancel: true },
+      ],
+    });
+    if (pick !== "trash") return;
+    try {
+      await invoke("trash_path", { path });
+      onPathTrashed(path);
+      changed(parentOf(path));
+    } catch (err) {
+      toast(String(err), 5000);
+    }
+  }
+
+  function openMenu(e) {
+    const row = e.target.closest(".fx-row[data-path]");
+    const inRepos = Boolean(e.target.closest("#rp-list"));
+    e.preventDefault();
+    const at = (items) => showMenu(e.clientX, e.clientY, items);
+
+    if (!row) {
+      if (!inRepos) at([
+        { icon: "file", label: "New file here", onClick: () => makeNew(root, "file") },
+        { icon: "folder", label: "New folder here", onClick: () => makeNew(root, "folder") },
+      ]);
+      return;
+    }
+    const path = row.dataset.path;
+    const name = row.dataset.name;
+    const isDir = row.dataset.dir === "1";
+    const isProject = row.classList.contains("rp-row"); // the project folder itself is left alone
+    if (isDir) {
+      at([
+        { icon: "file", label: "New file here", onClick: () => makeNew(path, "file") },
+        { icon: "folder", label: "New folder here", onClick: () => makeNew(path, "folder") },
+        { icon: "commands", label: "Go there in the terminal", onClick: () => typeCd(path) },
+        ...(isProject ? [] : ["-", { icon: "edit", label: "Rename…", onClick: () => renameItem(path, name) }, { icon: "trash", label: "Move to trash…", danger: true, onClick: () => trashItem(path, name, true) }]),
+      ]);
+    } else {
+      at([
+        { icon: "file", label: "Open", onClick: () => onOpenFile(path) },
+        "-",
+        { icon: "edit", label: "Rename…", onClick: () => renameItem(path, name) },
+        { icon: "trash", label: "Move to trash…", danger: true, onClick: () => trashItem(path, name, false) },
+      ]);
+    }
+  }
+
   /* ---------- Files | Repos ---------- */
 
   const repoList = byId("rp-list");
@@ -297,6 +391,8 @@ export async function initExplorer({ dragger, getActiveTabId, onCd, onOpenFile, 
 
   dragger.attach(tree);
   dragger.attach(repoList);
+  tree.addEventListener("contextmenu", openMenu);
+  repoList.addEventListener("contextmenu", openMenu);
   applyOpen();
   await render();
   showView(state.view);
