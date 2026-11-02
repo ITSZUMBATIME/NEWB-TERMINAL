@@ -337,8 +337,8 @@ export async function initExplorer({ dragger, getActiveTabId, onCd, onOpenFile, 
 
     if (!row) {
       if (!inRepos) at([
-        { icon: "file", label: "New file here", onClick: () => makeNew(root, "file") },
-        { icon: "folder", label: "New folder here", onClick: () => makeNew(root, "folder") },
+        { icon: "file", label: "New file", onClick: () => makeNew(root, "file") },
+        { icon: "folder", label: "New folder", onClick: () => makeNew(root, "folder") },
       ]);
       return;
     }
@@ -348,17 +348,17 @@ export async function initExplorer({ dragger, getActiveTabId, onCd, onOpenFile, 
     const isProject = row.classList.contains("rp-row"); // the project folder itself is left alone
     if (isDir) {
       at([
-        { icon: "file", label: "New file here", onClick: () => makeNew(path, "file") },
-        { icon: "folder", label: "New folder here", onClick: () => makeNew(path, "folder") },
+        { icon: "file", label: "New file", onClick: () => makeNew(path, "file") },
+        { icon: "folder", label: "New folder", onClick: () => makeNew(path, "folder") },
         { icon: "commands", label: "Go there in the terminal", onClick: () => typeCd(path) },
-        ...(isProject ? [] : ["-", { icon: "edit", label: "Rename…", onClick: () => renameItem(path, name) }, { icon: "trash", label: "Move to trash…", danger: true, onClick: () => trashItem(path, name, true) }]),
+        ...(isProject ? [] : ["-", { icon: "edit", label: "Rename", onClick: () => renameItem(path, name) }, { icon: "trash", label: "Move to trash", danger: true, onClick: () => trashItem(path, name, true) }]),
       ]);
     } else {
       at([
         { icon: "file", label: "Open", onClick: () => onOpenFile(path) },
         "-",
-        { icon: "edit", label: "Rename…", onClick: () => renameItem(path, name) },
-        { icon: "trash", label: "Move to trash…", danger: true, onClick: () => trashItem(path, name, false) },
+        { icon: "edit", label: "Rename", onClick: () => renameItem(path, name) },
+        { icon: "trash", label: "Move to trash", danger: true, onClick: () => trashItem(path, name, false) },
       ]);
     }
   }
