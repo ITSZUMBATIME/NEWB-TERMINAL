@@ -26,6 +26,9 @@ import { AsciiLogo, ASCII_STYLES } from "./asciilogo.js";
 // A tab is either a terminal ("term") or a text editor ("editor").
 const isTerm = (tab) => tab?.kind === "term";
 let lastTermId = null; // the terminal you were in last, so the explorer keeps following it
+let lastEditorId = null; // and the editor, for the side-by-side view
+let splitOn = false; // editor beside terminal
+let splitRatio = 0.5; // how much of the width the terminal gets when split
 
 const tabsEl = document.getElementById("tabs");
 const panesEl = document.getElementById("panes");
@@ -198,7 +201,7 @@ function applyScroll(tab) {
   if (!isTerm(tab)) return;
   const H = headerHeight();
   tab.s = Math.max(0, Math.min(H, tab.s));
-  if (tab.id === activeId) heroEl.style.transform = `translateY(${-tab.s}px)`;
+  if (tab.id === lastTermId) heroEl.style.transform = `translateY(${-tab.s}px)`;
   tab.holder.style.transform = `translateY(${H - tab.s}px)`;
 }
 
@@ -206,7 +209,7 @@ function applyScroll(tab) {
 function keepCursorInView(tab) {
   if (!isTerm(tab)) return;
   const H = headerHeight();
-  if (!H || tab.id !== activeId || !tab.opened) return;
+  if (!H || tab.id !== lastTermId || !tab.opened || !tab.pane.classList.contains("active")) return;
   const buf = tab.term.buffer.active;
   if (buf.type === "alternate") {
     // Full-screen programs (editors and so on) get the whole window.
@@ -278,8 +281,8 @@ function handleWheel(tab, e) {
 // slide the header away, or scroll the terminal's history.
 function scrollFromPanes(e) {
   if (e.target.closest(".xterm")) return;
-  const tab = activeTab();
-  if (!isTerm(tab) || !tab.opened) return;
+  const tab = shownTerm();
+  if (!tab || !tab.opened) return;
   if (handleWheel(tab, e) === false) return; // the header moved (or it was a zoom)
   const { dy, cellH } = wheelPixels(tab, e);
   if (!dy) return;
@@ -322,27 +325,66 @@ function cycleTab(dir) {
   activate(tabs[(i + dir + tabs.length) % tabs.length].id);
 }
 
-function activate(id) {
-  activeId = id;
+// The terminal that is on screen right now (or null if an editor has the whole window).
+function shownTerm() {
+  const t = tabs.find((x) => x.id === lastTermId && isTerm(x));
+  return t && t.pane.classList.contains("active") ? t : null;
+}
+
+const splitBtn = document.getElementById("toggle-split");
+const splitHandle = document.getElementById("split-handle");
+
+// Decide which panes are showing. Normally just the active tab. With the split on (and at least
+// one terminal and one editor open): the last terminal on the left, the last editor on the right.
+function layoutPanes() {
+  const term = tabs.find((t) => t.id === lastTermId && isTerm(t));
+  const editor = tabs.find((t) => t.id === lastEditorId && !isTerm(t));
+  const active = activeTab();
+  const split = Boolean(splitOn && term && editor);
+  panesEl.classList.toggle("split", split);
+  splitHandle.hidden = !split;
   for (const t of tabs) {
-    const on = t.id === id;
-    t.tabEl.classList.toggle("active", on);
-    t.pane.classList.toggle("active", on);
+    const visible = split ? t === term || t === editor : t === active;
+    t.pane.classList.toggle("active", visible);
+    if (split && visible) t.pane.dataset.side = isTerm(t) ? "left" : "right";
+    else delete t.pane.dataset.side;
+    t.tabEl.classList.toggle("shown", split && visible && t !== active);
   }
-  const tab = activeTab();
+  const termVisible = term && (split || active === term);
+  if (termVisible) {
+    heroEl.style.display = ""; // the welcome header belongs to the terminal
+    term.pane.prepend(heroEl);
+    applyScroll(term);
+    requestAnimationFrame(() => term.opened && fitAndResize(term)); // its width may have changed
+  } else {
+    heroEl.style.display = "none";
+  }
+}
+
+function toggleSplit() {
+  splitOn = !splitOn;
+  saveSetting("akin.split.v1", splitOn ? "1" : "0");
+  splitBtn.classList.toggle("active", splitOn);
+  if (splitOn && !tabs.some((t) => !isTerm(t))) toast("Open a file and it will show beside the terminal.", 3500);
+  layoutPanes();
+  focusActive();
+}
+
+function activate(id) {
+  const tab = tabs.find((t) => t.id === id);
   if (!tab) return;
+  activeId = id;
+  if (isTerm(tab)) lastTermId = id;
+  else lastEditorId = id;
+  for (const t of tabs) t.tabEl.classList.toggle("active", t.id === id);
+  layoutPanes();
   if (isTerm(tab)) {
-    lastTermId = id;
-    heroEl.style.display = ""; // the welcome header belongs to terminals
-    tab.pane.prepend(heroEl); // the header travels with the active tab
-    applyScroll(tab);
     if (tab.opened) {
       fitAndResize(tab);
       keepCursorInView(tab);
       tab.term.focus();
     }
   } else {
-    heroEl.style.display = "none";
     tab.editor.focus();
   }
 }
@@ -486,6 +528,11 @@ async function newTab() {
       explorerApi?.showSearch();
       return false;
     }
+    if (k === "b") {
+      e.preventDefault();
+      toggleSplit();
+      return false;
+    }
     if (k === "i") return false; // not used by NEWB: nothing is typed into the shell either
     return true;
   });
@@ -619,11 +666,14 @@ async function closeTab(id, alreadyExited = false) {
   tab.tabEl.remove();
   tabs.splice(i, 1);
   if (lastTermId === id) lastTermId = tabs.find(isTerm)?.id ?? null;
+  if (lastEditorId === id) lastEditorId = tabs.find((t) => !isTerm(t))?.id ?? null;
 
   if (tabs.length === 0) {
     invoke("quit_app");
   } else if (activeId === id) {
     activate(tabs[Math.max(0, i - 1)].id);
+  } else {
+    layoutPanes();
   }
 }
 
@@ -688,12 +738,13 @@ async function start() {
     if (e.key === "Tab") {
       e.preventDefault();
       cycleTab(e.shiftKey ? -1 : 1);
-    } else if (e.shiftKey && "wtelf".includes(k) && k.length === 1) {
+    } else if (e.shiftKey && "wtelfb".includes(k) && k.length === 1) {
       e.preventDefault();
       if (k === "t") newTab();
       else if (k === "w") closeTab(activeId);
       else if (k === "e") explorerApi?.toggle();
       else if (k === "f") explorerApi?.showSearch();
+      else if (k === "b") toggleSplit();
       else if (k === "l") cycleLogo();
     } else if (e.key === "=" || e.key === "+") {
       e.preventDefault();
@@ -720,7 +771,12 @@ async function start() {
   const dragger = createDragger({
     panesEl,
     // `target` says where it landed: { kind: "terminal" | "fav" | "cat", el }.
-    onDrop: (payload, target) => {
+    onDrop: (payload, target, at) => {
+      if (target.kind === "terminal" && at && panesEl.classList.contains("split")) {
+        const r = panesEl.getBoundingClientRect();
+        const id = at.x > r.left + r.width * splitRatio ? lastEditorId : lastTermId;
+        if (id != null && id !== activeId) activate(id);
+      }
       if (payload.kind === "cmd") {
         if (target.kind === "terminal") insertCommand(payload.cmd, payload.risky);
         else if (target.kind === "fav") drawersApi?.addFav(payload.cmd);
@@ -770,6 +826,10 @@ async function start() {
   // Clicking anywhere in the terminal area gives the terminal the keyboard (except on the info
   // text, which you may want to select and copy).
   panesEl.addEventListener("pointerdown", (e) => {
+    // with two panes showing, the one you click becomes the active one
+    const pane = e.target.closest(".pane");
+    const hit = pane && tabs.find((t) => t.pane === pane);
+    if (hit && hit.id !== activeId) activate(hit.id);
     if (e.target.closest("#info")) return;
     setTimeout(focusActive, 0);
   });
@@ -777,6 +837,33 @@ async function start() {
   panesEl.addEventListener("wheel", scrollFromPanes, { passive: false });
 
   newTabBtn.addEventListener("click", newTab);
+
+  // Editor beside terminal: the button, the remembered setting, and the draggable divider.
+  splitOn = loadSetting("akin.split.v1") === "1";
+  splitRatio = Math.min(0.8, Math.max(0.2, parseFloat(loadSetting("akin.split.ratio")) || 0.5));
+  panesEl.style.setProperty("--split", `${splitRatio * 100}%`);
+  splitBtn.classList.toggle("active", splitOn);
+  splitBtn.addEventListener("click", toggleSplit);
+  splitHandle.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    splitHandle.setPointerCapture(e.pointerId);
+    document.body.classList.add("resizing");
+    const move = (ev) => {
+      const r = panesEl.getBoundingClientRect();
+      splitRatio = Math.min(0.8, Math.max(0.2, (ev.clientX - r.left) / r.width));
+      panesEl.style.setProperty("--split", `${splitRatio * 100}%`);
+      const term = shownTerm();
+      if (term) requestAnimationFrame(() => fitAndResize(term));
+    };
+    const up = () => {
+      splitHandle.removeEventListener("pointermove", move);
+      splitHandle.removeEventListener("pointerup", up);
+      document.body.classList.remove("resizing");
+      saveSetting("akin.split.ratio", String(splitRatio));
+    };
+    splitHandle.addEventListener("pointermove", move);
+    splitHandle.addEventListener("pointerup", up);
+  });
   // After clicking a control, hand the keyboard back to the terminal so shortcuts keep working.
   const focusTerminal = focusActive;
   document.getElementById("ascii-logo").addEventListener("click", () => { cycleLogo(); focusTerminal(); });
@@ -801,13 +888,13 @@ async function start() {
   setLayout(savedLayout === -1 ? 0 : savedLayout, false);
 
   new ResizeObserver(() => {
-    const tab = activeTab();
-    if (isTerm(tab) && tab.opened) fitAndResize(tab);
+    const tab = shownTerm();
+    if (tab && tab.opened) fitAndResize(tab);
   }).observe(panesEl);
   // When the header changes size (window resize, layout change), keep everything lined up.
   new ResizeObserver(() => {
-    const tab = activeTab();
-    if (!isTerm(tab)) return;
+    const tab = shownTerm();
+    if (!tab) return;
     applyScroll(tab);
     keepCursorInView(tab);
   }).observe(heroEl);

@@ -11,6 +11,7 @@
         <button id="open-files" class="bar-btn" data-icon="files" title="Files (Ctrl+Shift+E)"><span>Files</span></button>
         <div id="tabs"></div>
         <button id="new-tab" data-icon="plus" title="New tab (Ctrl+Shift+T)" aria-label="New tab"></button>
+        <button id="toggle-split" class="bar-btn icon-only" data-icon="split" title="Editor beside terminal (Ctrl+Shift+B)" aria-label="Editor beside terminal"></button>
         <button id="open-cheats" class="bar-btn" data-icon="commands" title="Cheat sheet (Ctrl+Shift+S)"><span>Cheat sheet</span></button>
         <button id="open-keys" class="bar-btn" data-icon="keyboard" title="Shortcuts (Ctrl+Shift+K)"><span>Shortcuts</span></button>
         <button id="open-display" class="bar-btn icon-only" data-icon="display" title="Display: size and looks" aria-label="Display"></button>
@@ -77,7 +78,7 @@
           </div>
           <div id="fx-resize" class="fx-resize" title="Drag to resize"></div>
         </aside>
-        <div id="panes"></div>
+        <div id="panes"><div id="split-handle" hidden title="Drag to resize"></div></div>
       </div>
 
       <div id="logo-toast"></div>

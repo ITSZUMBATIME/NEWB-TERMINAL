@@ -157,7 +157,7 @@ export function createDragger({ panesEl, onDrop, onStart, onEnd, onLeaveSource }
       setTimeout(() => (justDragged = false), 0);
       const target = targetAt(e.clientX, e.clientY, d.payload);
       cleanup();
-      if (target) onDrop(d.payload, target);
+      if (target) onDrop(d.payload, target, { x: e.clientX, y: e.clientY });
     } else {
       cleanup();
     }

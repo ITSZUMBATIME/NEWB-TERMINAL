@@ -103,7 +103,7 @@ export function createEditor({ host, path, text, vim: vimOn, onDirty, onSave, on
         ]),
         // The editor also uses some of NEWB's own Ctrl+Shift keys (Ctrl+Shift+K deletes a line).
         // Swallow them here so only NEWB's meaning happens.
-        Prec.highest(keymap.of(["k", "l", "s", "d", "e", "t", "w", "f"].map((k) => ({ key: `Mod-Shift-${k}`, run: () => true })))),
+        Prec.highest(keymap.of(["k", "l", "s", "d", "e", "t", "w", "f", "b"].map((k) => ({ key: `Mod-Shift-${k}`, run: () => true })))),
         langBox.of([]),
         oneDark,
         Prec.highest(look), // after oneDark, so NEWB's own colours win

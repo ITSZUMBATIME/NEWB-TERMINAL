@@ -17,6 +17,7 @@ const PAGE = '<path d="M6.5 3h7l5 5v12a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V4a1 1 0 0
 
 const ICONS = {
   /* ---- Buttons and controls ---- */
+  split: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M12 4.5v15"/><path d="M15 9.5h3M15 12.5h3" opacity=".6"/>',
   files: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M9.5 4.5v15"/>',
   commands: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7.5 9.5l3 2.5-3 2.5M13 15h4"/>',
   keyboard: '<rect x="2.5" y="6.5" width="19" height="11" rx="2"/><path d="M6.5 10.5h.01M10 10.5h.01M13.5 10.5h.01M17 10.5h.01M7.5 14h9"/>',

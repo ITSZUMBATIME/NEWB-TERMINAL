@@ -828,3 +828,17 @@ html[data-panels="terminal"] .sr-box, html[data-panels="terminal"] .sr-scope, ht
 .gc-chip code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 11px; }
 html[data-panels="terminal"] .gc-box, html[data-panels="terminal"] .gc-msg, html[data-panels="terminal"] .gc-commit, html[data-panels="terminal"] .gc-chip, html[data-panels="terminal"] .rp-sync-btn { border-radius: 0; }
 html[data-panels="terminal"] .gc-commit, html[data-panels="terminal"] .rp-sync-btn.strong { background: #12261a; border-color: #1c3324; color: #7ee787; }
+
+/* ====================================================================================
+   Editor beside terminal
+   ==================================================================================== */
+#panes.split .pane.active[data-side="left"] { right: calc(100% - var(--split, 50%)); }
+#panes.split .pane.active[data-side="right"] { left: var(--split, 50%); border-left: 1px solid #000; }
+#split-handle { position: absolute; top: 0; bottom: 0; left: var(--split, 50%); z-index: 20; width: 9px; margin-left: -4px; cursor: col-resize; }
+#split-handle[hidden] { display: none; }
+#split-handle::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 1px; background: #232830; transition: background 0.12s, width 0.12s; }
+#split-handle:hover::after, body.resizing #split-handle::after { left: 3px; width: 3px; background: rgba(78, 161, 255, 0.45); }
+.tab.shown { box-shadow: inset 0 2px 0 #2a3a52; }
+#toggle-split.active { color: var(--accent); }
+html[data-panels="terminal"] #toggle-split.active { color: #3fb950; }
+#panes.split #info { display: none; } /* the info table needs more width than half a window */

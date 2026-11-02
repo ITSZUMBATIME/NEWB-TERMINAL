@@ -192,6 +192,7 @@ export const SHORTCUTS = [
     rows: [
       { keys: ["Ctrl", "Shift", "E"], what: "Show or hide Files" },
       { keys: ["Ctrl", "Shift", "F"], what: "Search the text inside a project" },
+      { keys: ["Ctrl", "Shift", "B"], what: "Show the editor beside the terminal" },
       { keys: ["Ctrl", "Shift", "S"], what: "Show or hide the cheat sheet" },
       { keys: ["Ctrl", "Shift", "D"], what: "Search the cheat sheet" },
       { keys: ["Ctrl", "Shift", "K"], what: "Show these shortcuts" },
