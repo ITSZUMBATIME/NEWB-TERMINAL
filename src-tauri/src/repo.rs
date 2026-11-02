@@ -129,27 +129,41 @@ pub struct GitSummary {
     branch: String,
     ahead: u32,
     behind: u32,
+    /// There is at least one remote (like GitHub) to push to.
+    has_remote: bool,
+    /// This branch already follows a branch on the remote.
+    has_upstream: bool,
     changes: Vec<GitChange>,
 }
 
-fn git(path: &str, args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git")
-        .arg("-C")
+fn run_git(path: &str, args: &[&str], network: bool) -> Result<String, String> {
+    let mut cmd = Command::new("git");
+    cmd.arg("-C")
         .arg(path)
         .args(args)
         .env("GIT_OPTIONAL_LOCKS", "0") // looking must never change anything
-        .output()
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                "git isn't installed".to_string()
-            } else {
-                e.to_string()
-            }
-        })?;
+        .env("GIT_TERMINAL_PROMPT", "0"); // never sit waiting for a password nobody can type
+    if network {
+        // no passphrase prompts either (keys held by an agent still work)
+        cmd.env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes");
+    }
+    let out = cmd.output().map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            "git isn't installed".to_string()
+        } else {
+            e.to_string()
+        }
+    })?;
     if !out.status.success() {
-        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+        let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        // some git messages ("nothing to commit") come out on stdout
+        return Err(if err.is_empty() { String::from_utf8_lossy(&out.stdout).trim().to_string() } else { err });
     }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+fn git(path: &str, args: &[&str]) -> Result<String, String> {
+    run_git(path, args, false)
 }
 
 fn summary(path: &str) -> Result<GitSummary, String> {
@@ -202,10 +216,15 @@ fn summary(path: &str) -> Result<GitSummary, String> {
         });
     }
 
+    let has_remote = git(path, &["remote"]).map(|r| !r.trim().is_empty()).unwrap_or(false);
+    let has_upstream = git(path, &["rev-parse", "--abbrev-ref", "@{upstream}"]).is_ok();
+
     Ok(GitSummary {
         branch,
         ahead,
         behind,
+        has_remote,
+        has_upstream,
         changes,
     })
 }
@@ -295,4 +314,164 @@ pub async fn trash_path(path: String) -> Result<(), String> {
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/* ---------- Git actions (the buttons in the Repos tab) ---------- */
+
+/// Commit exactly these files with this message. New and deleted files are included.
+#[tauri::command]
+pub async fn git_commit(path: String, files: Vec<String>, message: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if message.trim().is_empty() {
+            return Err("Write a short message first.".to_string());
+        }
+        if files.is_empty() {
+            return Err("Tick at least one file.".to_string());
+        }
+        let mut add: Vec<&str> = vec!["add", "-A", "--"];
+        add.extend(files.iter().map(String::as_str));
+        git(&path, &add)?;
+        let mut commit: Vec<&str> = vec!["commit", "-m", message.trim(), "--"];
+        commit.extend(files.iter().map(String::as_str));
+        let out = git(&path, &commit)?;
+        Ok(out.lines().next().unwrap_or("").to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// fetch, pull (only if it can simply catch up), push, or publish (first push of a new branch).
+#[tauri::command]
+pub async fn git_sync(path: String, action: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let out = match action.as_str() {
+            "fetch" => run_git(&path, &["fetch"], true)?,
+            "pull" => run_git(&path, &["pull", "--ff-only"], true)?,
+            "push" => run_git(&path, &["push"], true)?,
+            "publish" => {
+                let remote = git(&path, &["remote"])?
+                    .lines()
+                    .next()
+                    .unwrap_or("origin")
+                    .to_string();
+                run_git(&path, &["push", "-u", &remote, "HEAD"], true)?
+            }
+            _ => return Err("Unknown action.".to_string()),
+        };
+        Ok(out.lines().next().unwrap_or("").to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/* ---------- Search across a project ---------- */
+
+#[derive(Serialize)]
+pub struct SearchHit {
+    line: u32,
+    /// Column of the first match in the full line (0 is the start).
+    col: u32,
+    /// The line, without leading spaces, cut to a sensible length.
+    text: String,
+    /// Where the matches are inside `text`, as [start, end] pairs.
+    ranges: Vec<[u32; 2]>,
+}
+
+#[derive(Serialize)]
+pub struct SearchFile {
+    /// Relative to the folder that was searched.
+    path: String,
+    hits: Vec<SearchHit>,
+}
+
+#[derive(Serialize)]
+pub struct SearchResult {
+    files: Vec<SearchFile>,
+    total: u32,
+    /// True if we stopped early because there were too many matches.
+    truncated: bool,
+}
+
+const MAX_HITS: u32 = 500;
+const MAX_LINE_CHARS: usize = 240;
+
+fn search(root: &str, query: &str, match_case: bool, whole_word: bool, use_regex: bool) -> Result<SearchResult, String> {
+    let mut result = SearchResult { files: Vec::new(), total: 0, truncated: false };
+    if query.is_empty() {
+        return Ok(result);
+    }
+    let mut pattern = if use_regex { query.to_string() } else { regex::escape(query) };
+    if whole_word {
+        pattern = format!(r"\b(?:{pattern})\b");
+    }
+    let re = regex::RegexBuilder::new(&pattern)
+        .case_insensitive(!match_case)
+        .build()
+        .map_err(|e| format!("That isn't a valid pattern: {}", e.to_string().lines().last().unwrap_or("").trim()))?;
+
+    let walker = ignore::WalkBuilder::new(root)
+        .hidden(true) // skip hidden files and folders such as .git
+        .git_ignore(true) // and anything the project's .gitignore lists
+        .max_filesize(Some(1024 * 1024))
+        .filter_entry(|e| e.file_name() != "node_modules" && e.file_name() != "target")
+        .build();
+
+    for entry in walker.flatten() {
+        if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+            continue;
+        }
+        let Ok(bytes) = fs::read(entry.path()) else { continue };
+        if bytes.iter().take(8000).any(|b| *b == 0) {
+            continue; // not text
+        }
+        let Ok(text) = String::from_utf8(bytes) else { continue };
+
+        let mut hits: Vec<SearchHit> = Vec::new();
+        for (i, line) in text.lines().enumerate() {
+            let found: Vec<(usize, usize)> = re.find_iter(line).map(|m| (m.start(), m.end())).collect();
+            if found.is_empty() {
+                continue;
+            }
+            let lead = line.len() - line.trim_start().len();
+            let lead_chars = line[..lead].chars().count();
+            let shown: String = line[lead..].chars().take(MAX_LINE_CHARS).collect();
+            let shown_len = shown.chars().count();
+            let ranges: Vec<[u32; 2]> = found
+                .iter()
+                .filter_map(|&(s, e)| {
+                    let s = line[..s].chars().count().saturating_sub(lead_chars);
+                    let e = line[..e].chars().count().saturating_sub(lead_chars);
+                    if s >= shown_len { None } else { Some([s as u32, e.min(shown_len) as u32]) }
+                })
+                .collect();
+            hits.push(SearchHit {
+                line: (i + 1) as u32,
+                col: line[..found[0].0].chars().count() as u32,
+                text: shown,
+                ranges,
+            });
+            result.total += 1;
+            if result.total >= MAX_HITS {
+                result.truncated = true;
+                break;
+            }
+        }
+        if !hits.is_empty() {
+            let rel = entry.path().strip_prefix(root).unwrap_or(entry.path());
+            result.files.push(SearchFile { path: rel.to_string_lossy().into_owned(), hits });
+        }
+        if result.truncated {
+            break;
+        }
+    }
+    result.files.sort_by(|a, b| a.path.to_lowercase().cmp(&b.path.to_lowercase()));
+    Ok(result)
+}
+
+/// Find text in the files of one folder (a project). Skips hidden files, .gitignore'd files and binaries.
+#[tauri::command]
+pub async fn search_project(root: String, query: String, match_case: bool, whole_word: bool, use_regex: bool) -> Result<SearchResult, String> {
+    tauri::async_runtime::spawn_blocking(move || search(&root, &query, match_case, whole_word, use_regex))
+        .await
+        .map_err(|e| e.to_string())?
 }

@@ -103,7 +103,7 @@ export function createEditor({ host, path, text, vim: vimOn, onDirty, onSave, on
         ]),
         // The editor also uses some of NEWB's own Ctrl+Shift keys (Ctrl+Shift+K deletes a line).
         // Swallow them here so only NEWB's meaning happens.
-        Prec.highest(keymap.of(["k", "l", "s", "d", "e", "t", "w"].map((k) => ({ key: `Mod-Shift-${k}`, run: () => true })))),
+        Prec.highest(keymap.of(["k", "l", "s", "d", "e", "t", "w", "f"].map((k) => ({ key: `Mod-Shift-${k}`, run: () => true })))),
         langBox.of([]),
         oneDark,
         Prec.highest(look), // after oneDark, so NEWB's own colours win
@@ -137,6 +137,15 @@ export function createEditor({ host, path, text, vim: vimOn, onDirty, onSave, on
     },
     insertText(t) {
       view.dispatch(view.state.replaceSelection(t));
+      view.focus();
+    },
+    /** Jump to a line (1 is the first) and select `len` letters from column `col`. */
+    goTo(line, col = 0, len = 0) {
+      const doc = view.state.doc;
+      const ln = doc.line(Math.min(Math.max(line, 1), doc.lines));
+      const from = Math.min(ln.from + col, ln.to);
+      const to = Math.min(from + len, ln.to);
+      view.dispatch({ selection: { anchor: from, head: to }, effects: EditorView.scrollIntoView(from, { y: "center" }) });
       view.focus();
     },
     focus: () => view.focus(),

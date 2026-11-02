@@ -481,6 +481,11 @@ async function newTab() {
       explorerApi?.toggle();
       return false;
     }
+    if (k === "f") {
+      e.preventDefault();
+      explorerApi?.showSearch();
+      return false;
+    }
     if (k === "i") return false; // not used by NEWB: nothing is typed into the shell either
     return true;
   });
@@ -517,10 +522,11 @@ async function saveEditor(tab) {
 }
 
 // Open a file in an editor tab (or jump to it if it is already open).
-async function openFile(path) {
+async function openFile(path, at) {
   const existing = tabs.find((t) => !isTerm(t) && t.path === path);
   if (existing) {
     activate(existing.id);
+    if (at) existing.editor.goTo(at.line, at.col, at.len);
     return;
   }
   let file;
@@ -574,6 +580,7 @@ async function openFile(path) {
     closeTab(id);
   });
   activate(id);
+  if (at) tab.editor.goTo(at.line, at.col, at.len);
 }
 
 // Ask what to do with unsaved changes. Returns true if the tab may close.
@@ -681,11 +688,12 @@ async function start() {
     if (e.key === "Tab") {
       e.preventDefault();
       cycleTab(e.shiftKey ? -1 : 1);
-    } else if (e.shiftKey && "wtel".includes(k) && k.length === 1) {
+    } else if (e.shiftKey && "wtelf".includes(k) && k.length === 1) {
       e.preventDefault();
       if (k === "t") newTab();
       else if (k === "w") closeTab(activeId);
       else if (k === "e") explorerApi?.toggle();
+      else if (k === "f") explorerApi?.showSearch();
       else if (k === "l") cycleLogo();
     } else if (e.key === "=" || e.key === "+") {
       e.preventDefault();
@@ -752,6 +760,7 @@ async function start() {
       const tab = terminalForAction();
       if (tab) typeText(`cd ${shellPath(path, homeDir, await cwdOf(tab))}`);
     },
+    getActiveFilePath: () => (activeTab() && !isTerm(activeTab()) ? activeTab().path : null),
     onOpenFile: openFile,
     onPathChanged: pathChanged,
     onPathTrashed: pathTrashed,

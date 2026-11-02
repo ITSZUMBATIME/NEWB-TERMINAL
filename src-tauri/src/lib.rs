@@ -226,6 +226,9 @@ pub fn run() {
             repo::create_folder,
             repo::rename_path,
             repo::trash_path,
+            repo::git_commit,
+            repo::git_sync,
+            repo::search_project,
             sysinfo::system_info
         ])
         .run(tauri::generate_context!())

@@ -3,7 +3,7 @@
 // get a letter (M changed, A added, U new, D deleted, R renamed, ! conflict). Click a file to edit it.
 
 import { invoke } from "@tauri-apps/api/core";
-import { el, miniForm } from "./ui.js";
+import { el, miniForm, shellQuote } from "./ui.js";
 import { icon } from "./icons.js";
 
 const KEY = "akin.repos.v1";
@@ -21,10 +21,10 @@ function loadConfig(home) {
 
 /**
  * options: { list, addBtn, refreshBtn, fillTree(container, dir, depth, ctx), dragger, home, toast,
- *            getFilesFolder(), isVisible(), onCd(path) }
+ *            getFilesFolder(), isVisible(), onCd(path), onOpenFile(path) }
  * returns { show, refresh, noteSaved(path) }
  */
-export function initRepos({ list, addBtn, refreshBtn, fillTree, dragger, home, toast, getFilesFolder, isVisible, onCd }) {
+export function initRepos({ list, addBtn, refreshBtn, fillTree, dragger, home, toast, getFilesFolder, isVisible, onCd, onOpenFile }) {
   const cfg = loadConfig(home);
   const save = () => {
     try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (_) { /* fine */ }
@@ -107,6 +107,7 @@ export function initRepos({ list, addBtn, refreshBtn, fillTree, dragger, home, t
     if (s.behind) m.append(el("span", "rp-sync", `↓${s.behind}`));
     const n = s.changes.length;
     m.append(el("span", n ? "rp-changes" : "rp-clean", n ? `${n} changed` : "clean"));
+    updateSyncButton(repo);
   }
 
   async function refreshSummaries() {
@@ -124,6 +125,7 @@ export function initRepos({ list, addBtn, refreshBtn, fillTree, dragger, home, t
               indexChanges(repo);
               showMeta(repo);
               redecorate(repo);
+              renderChanges(repo);
             }
           } catch (err) {
             repo.error = String(err);
@@ -142,6 +144,191 @@ export function initRepos({ list, addBtn, refreshBtn, fillTree, dragger, home, t
 
   /* ---------- Drawing the list ---------- */
 
+  /* ---------- Git: sync button, changes list, commit ---------- */
+
+  // Say what went wrong in plain words, and what to do about it.
+  function explainGitError(err, cmd) {
+    const text = String(err);
+    if (/Author identity unknown|Please tell me who you are|unable to auto-detect email/i.test(text)) {
+      return 'Git doesn\'t know who you are yet. In the terminal, run: git config --global user.name "Your Name" and git config --global user.email "you@example.com"';
+    }
+    if (/Authentication failed|could not read (Username|Password)|terminal prompts disabled|Permission denied|publickey/i.test(text)) {
+      return `It needs you to sign in first. Run ${cmd} once in the terminal so git can ask for your password or token.`;
+    }
+    if (/not possible to fast-forward|divergent|diverged|non-fast-forward|rejected/i.test(text)) {
+      return `You and the remote both have new changes, so this needs care. Use the terminal for it: ${cmd}`;
+    }
+    return text.split("\n").slice(0, 3).join(" ");
+  }
+
+  // The one button that changes meaning: Publish, Pull, Push, or just Fetch.
+  function syncPlan(repo) {
+    const s = repo.summary;
+    if (!s || !s.has_remote) return null;
+    if (!s.has_upstream) return { action: "publish", label: "Publish", cmd: "git push -u origin HEAD", busy: "Publishing…" };
+    if (s.behind) return { action: "pull", label: `Pull ${s.behind}`, cmd: "git pull", busy: "Pulling…" };
+    if (s.ahead) return { action: "push", label: `Push ${s.ahead}`, cmd: "git push", busy: "Pushing…", strong: true };
+    return { action: "fetch", label: "Fetch", cmd: "git fetch", busy: "Checking…" };
+  }
+
+  function updateSyncButton(repo) {
+    const b = repo.syncBtn;
+    const plan = syncPlan(repo);
+    b.hidden = !plan;
+    if (!plan) return;
+    b.textContent = repo.syncing ? plan.busy : plan.label;
+    b.disabled = Boolean(repo.syncing);
+    b.classList.toggle("strong", Boolean(plan.strong) || plan.action === "pull" || plan.action === "publish");
+    b.title = `Runs: ${plan.cmd}`;
+  }
+
+  async function doSync(repo) {
+    const plan = syncPlan(repo);
+    if (!plan || repo.syncing) return;
+    repo.syncing = true;
+    updateSyncButton(repo);
+    try {
+      await invoke("git_sync", { path: repo.path, action: plan.action });
+      toast(`Done: ${plan.cmd}`, 2500);
+    } catch (err) {
+      toast(explainGitError(err, plan.cmd), 9000);
+    } finally {
+      repo.syncing = false;
+      refreshSummaries();
+      updateSyncButton(repo);
+    }
+  }
+
+  const checkedFiles = (repo) => (repo.summary?.changes || []).map((c) => c.path).filter((p) => !repo.unchecked.has(p));
+
+  // The command that the Commit button runs, to copy or drag into the terminal.
+  function commitCommand(repo, files) {
+    const msg = repo.message.trim();
+    return `git add -A -- ${files.map(shellQuote).join(" ")} && git commit -m ${shellQuote(msg)}`;
+  }
+
+  function updateCommitUi(repo) {
+    const ui = repo.commitUi;
+    if (!ui) return;
+    const all = repo.summary?.changes || [];
+    const files = checkedFiles(repo);
+    const msg = repo.message.trim();
+    ui.all.checked = files.length === all.length && all.length > 0;
+    ui.all.indeterminate = files.length > 0 && files.length < all.length;
+    ui.button.textContent = repo.committing ? "Committing…" : `Commit ${files.length} file${files.length === 1 ? "" : "s"} to ${repo.summary?.branch ?? "this branch"}`;
+    ui.button.disabled = repo.committing || !files.length || !msg;
+    if (files.length && msg) {
+      const cmd = commitCommand(repo, files);
+      ui.chip.dataset.cmd = cmd;
+      ui.chipText.textContent = cmd;
+      ui.chip.hidden = false;
+    } else {
+      ui.chip.hidden = true;
+      delete ui.chip.dataset.cmd;
+    }
+  }
+
+  async function commit(repo) {
+    const files = checkedFiles(repo);
+    const msg = repo.message.trim();
+    if (!files.length || !msg || repo.committing) return;
+    repo.committing = true;
+    updateCommitUi(repo);
+    try {
+      await invoke("git_commit", { path: repo.path, files, message: msg });
+      repo.message = "";
+      repo.unchecked.clear();
+      toast(`Committed: ${msg}`, 3000);
+    } catch (err) {
+      toast(explainGitError(err, "git commit"), 9000);
+    } finally {
+      repo.committing = false;
+      await refreshSummaries();
+      renderChanges(repo);
+    }
+  }
+
+  // The "Changes" box under an open project: tick the files, say what you did, commit.
+  function renderChanges(repo) {
+    const box = repo.changesBox;
+    const changes = repo.summary?.changes || [];
+    const msgInput = repo.commitUi?.msg;
+    const hadFocus = msgInput && document.activeElement === msgInput;
+    const caret = hadFocus ? msgInput.selectionStart : 0;
+    box.replaceChildren();
+    repo.commitUi = null;
+    if (!changes.length || !repo.row.classList.contains("open")) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    repo.unchecked = new Set([...repo.unchecked].filter((p) => changes.some((c) => c.path === p)));
+
+    const all = el("input", "gc-check");
+    all.type = "checkbox";
+    all.title = "Tick or untick every file";
+    all.addEventListener("change", () => {
+      repo.unchecked = all.checked ? new Set() : new Set(changes.map((c) => c.path));
+      for (const cb of box.querySelectorAll(".gc-file .gc-check")) cb.checked = all.checked;
+      updateCommitUi(repo);
+    });
+    const head = el("label", "gc-head");
+    head.append(all, el("span", "", `Changes · ${changes.length} file${changes.length === 1 ? "" : "s"}`));
+    box.append(head);
+
+    for (const c of changes) {
+      const isDir = c.path.endsWith("/");
+      const row = el("div", "gc-file");
+      row.dataset.git = c.code;
+      const cb = el("input", "gc-check");
+      cb.type = "checkbox";
+      cb.checked = !repo.unchecked.has(c.path);
+      cb.addEventListener("change", () => {
+        if (cb.checked) repo.unchecked.delete(c.path);
+        else repo.unchecked.add(c.path);
+        updateCommitUi(repo);
+      });
+      const name = el("span", "gc-name", c.path);
+      name.title = c.code === "D" || isDir ? c.path : `Open ${c.path}`;
+      if (c.code !== "D" && !isDir) name.addEventListener("click", () => onOpenFile(`${repo.path}/${c.path}`));
+      const badge = el("span", "git-badge", c.code);
+      badge.title = WORD[c.code] || "";
+      row.append(cb, name, badge);
+      box.append(row);
+    }
+
+    const msg = el("input", "gc-msg");
+    msg.type = "text";
+    msg.placeholder = "Describe what you changed";
+    msg.spellcheck = true;
+    msg.value = repo.message;
+    msg.addEventListener("input", () => {
+      repo.message = msg.value;
+      updateCommitUi(repo);
+    });
+    msg.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        commit(repo);
+      }
+    });
+    const button = el("button", "gc-commit");
+    button.type = "button";
+    button.addEventListener("click", () => commit(repo));
+    const chip = el("div", "gc-chip");
+    chip.title = "The same thing as a command. Drag it into the terminal to run it yourself.";
+    const chipText = el("code", "", "");
+    chip.append(chipText);
+    box.append(msg, button, chip);
+
+    repo.commitUi = { all, msg, button, chip, chipText };
+    updateCommitUi(repo);
+    if (hadFocus) {
+      msg.focus();
+      msg.setSelectionRange(caret, caret);
+    }
+  }
+
   function repoNode(repo) {
     const node = el("div", "fx-node rp-node");
     const row = el("div", "fx-row rp-row");
@@ -158,23 +345,34 @@ export function initRepos({ list, addBtn, refreshBtn, fillTree, dragger, home, t
       e.stopPropagation();
       onCd(repo.path);
     });
-    row.append(el("span", "caret"), icon("git"), text, cd);
+    const syncBtn = el("button", "rp-sync-btn");
+    syncBtn.type = "button";
+    syncBtn.hidden = true;
+    syncBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      doSync(repo);
+    });
+    row.append(el("span", "caret"), icon("git"), text, cd, syncBtn); // sync stays put when "cd" appears on hover
+    const changesBox = el("div", "gc-box");
+    changesBox.hidden = true;
     const kids = el("div", "fx-kids");
-    node.append(row, kids);
+    node.append(row, changesBox, kids);
 
-    Object.assign(repo, { node, row, meta, kids, ctx: makeContext(repo) });
+    Object.assign(repo, { node, row, meta, kids, syncBtn, changesBox, unchecked: new Set(), message: "", ctx: makeContext(repo) });
     indexChanges(repo);
     showMeta(repo);
 
     const openIt = () => {
       row.classList.add("open");
       fillTree(kids, repo.path, 1, repo.ctx);
+      renderChanges(repo);
     };
     row.addEventListener("click", () => {
       if (dragger.justDragged) return;
       if (row.classList.contains("open")) {
         row.classList.remove("open");
         kids.replaceChildren();
+        renderChanges(repo);
         cfg.open = cfg.open.filter((p) => p !== repo.path);
       } else {
         openIt();
@@ -285,6 +483,12 @@ export function initRepos({ list, addBtn, refreshBtn, fillTree, dragger, home, t
   });
 
   return {
+    /** The projects found so far (for the Search tab's "where to look" list). */
+    list: () => repos.map((x) => ({ name: x.name, path: x.path })),
+    /** Resolves once the first look for projects has finished. */
+    async ready() {
+      if (!scanned) await scan();
+    },
     show() {
       if (!scanned) scan();
       else refreshSummaries();

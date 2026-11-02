@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { el, askText, askChoice, showMenu } from "./ui.js";
 import { fileIcon } from "./icons.js";
 import { initRepos } from "./repos.js";
+import { initSearch } from "./search.js";
 
 const KEY = "akin.explorer.v1";
 const MIN_W = 190;
@@ -25,11 +26,11 @@ const join = (dir, name) => (dir === "/" ? `/${name}` : `${dir}/${name}`);
 const parentOf = (p) => (p === "/" ? "/" : p.slice(0, p.lastIndexOf("/")) || "/");
 
 /**
- * options: { dragger, getActiveTabId(), onCd(path), onOpenFile(path), onPathChanged(from, to),
+ * options: { dragger, getActiveTabId(), getActiveFilePath(), onCd(path), onOpenFile(path, at), onPathChanged(from, to),
  *            onPathTrashed(path), toast(msg) }
- * returns { toggle, open, close, isOpen, refresh, sync, noteSaved(path) }
+ * returns { toggle, open, close, isOpen, refresh, sync, noteSaved(path), showSearch }
  */
-export async function initExplorer({ dragger, getActiveTabId, onCd, onOpenFile, onPathChanged, onPathTrashed, toast }) {
+export async function initExplorer({ dragger, getActiveTabId, getActiveFilePath, onCd, onOpenFile, onPathChanged, onPathTrashed, toast }) {
   const root_ = document.getElementById("explorer");
   const workspace = document.getElementById("workspace");
   const tree = document.getElementById("fx-tree");
@@ -83,6 +84,9 @@ export async function initExplorer({ dragger, getActiveTabId, onCd, onOpenFile, 
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "e") {
       e.preventDefault();
       toggle();
+    } else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "f") {
+      e.preventDefault();
+      showSearch();
     }
   });
 
@@ -377,15 +381,34 @@ export async function initExplorer({ dragger, getActiveTabId, onCd, onOpenFile, 
     getFilesFolder: () => root,
     isVisible: () => state.open && state.view === "repos",
     onCd: typeCd,
+    onOpenFile,
   });
-  const viewEls = { files: byId("fx-view-files"), repos: byId("fx-view-repos") };
+  const search = initSearch({
+    input: byId("sr-input"),
+    scopeSelect: byId("sr-scope"),
+    caseBtn: byId("sr-case"),
+    wordBtn: byId("sr-word"),
+    regexBtn: byId("sr-regex"),
+    summary: byId("sr-summary"),
+    results: byId("sr-results"),
+    getScopes: () => [...repos.list().map((r) => ({ label: r.name, path: r.path })), { label: `Folder shown in Files (${pretty(root)})`, path: root }],
+    getPreferredPath: () => getActiveFilePath?.() || null,
+    onOpen: onOpenFile,
+    toast,
+  });
+  const viewEls = { files: byId("fx-view-files"), repos: byId("fx-view-repos"), search: byId("fx-view-search") };
   const viewTabs = [...root_.querySelectorAll("[data-fxview]")];
   function showView(name) {
-    state.view = name === "repos" ? "repos" : "files";
+    state.view = viewEls[name] ? name : "files";
     save();
     for (const [k, v] of Object.entries(viewEls)) v.hidden = k !== state.view;
     for (const b of viewTabs) b.classList.toggle("on", b.dataset.fxview === state.view);
     if (state.view === "repos") repos.show();
+    if (state.view === "search") repos.ready().then(() => search.show());
+  }
+  function showSearch() {
+    open();
+    showView("search");
   }
   for (const b of viewTabs) b.addEventListener("click", () => showView(b.dataset.fxview));
 
@@ -398,5 +421,5 @@ export async function initExplorer({ dragger, getActiveTabId, onCd, onOpenFile, 
   showView(state.view);
   sync();
 
-  return { toggle, open, close, isOpen, refresh: render, sync, noteSaved: repos.noteSaved };
+  return { toggle, open, close, isOpen, refresh: render, sync, noteSaved: repos.noteSaved, showSearch };
 }
