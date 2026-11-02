@@ -7,6 +7,7 @@
 //
 // The shell (bash, zsh...) only ever sees ordinary typing: we move its cursor with arrow
 // keys and delete the placeholder word with the Delete key. Nothing special is installed.
+import { UI } from "./theme.js";
 
 const LEFT = "\x1b[D";
 const RIGHT = "\x1b[C";
@@ -14,8 +15,6 @@ const DELETE = "\x1b[3~";
 const BACKSPACE = "\x7f";
 const BLANK_RE = /\{\{([^}]+)\}\}/g;
 
-const COLOR_ARMED = { bg: "#4ea1ff", fg: "#0b0d10" };
-const COLOR_PENDING = { bg: "#2a4a78", fg: "#ffffff" };
 
 /** "cp {{file}} {{to}}" -> { text: "cp FILE TO", blanks: [{ off, len, name }, ...] } */
 export function parseSpec(cmd) {
@@ -193,7 +192,7 @@ export function refresh(tab) {
     const x = idx % cols;
     const marker = term.registerMarker(line - cursorLine);
     if (!marker) return;
-    const c = armed ? COLOR_ARMED : COLOR_PENDING;
+    const c = armed ? UI.armed : UI.pending;
     const deco = term.registerDecoration({
       marker,
       x,

@@ -24,3 +24,11 @@ export const THEME = {
 };
 
 export const COLOR_NAMES = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"];
+
+// Colours the interface itself needs in JavaScript (kept up to date by themes.js).
+export const UI = {
+  accent: "#4ea1ff",
+  onAccent: "#14161a",
+  armed: { bg: "#4ea1ff", fg: "#0b0d10" },
+  pending: { bg: "#2a4a78", fg: "#ffffff" },
+};

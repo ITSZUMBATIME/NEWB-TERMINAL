@@ -33,13 +33,16 @@ function load() {
 
 /**
  * options: { onFontChange(px), onEditorChange(isVim), toast(msg) }
- * returns { state, popover, stepScale(dir), resetScale() }
+ * returns { state, popover, stepScale(dir), resetScale(), setScale, setFont, setLook, setEditor, subscribe }
  */
 export function initDisplay({ onFontChange, onEditorChange, toast }) {
   const state = load();
   const save = () => {
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (_) { /* fine */ }
   };
+
+  const listeners = new Set();
+  const emit = () => listeners.forEach((fn) => fn(state));
 
   const pop = document.getElementById("display-pop");
   const scaleVal = document.getElementById("scale-val");
@@ -84,6 +87,7 @@ export function initDisplay({ onFontChange, onEditorChange, toast }) {
     state.scale = clamp(Math.round(value * 100) / 100, SCALE_MIN, SCALE_MAX);
     save();
     applyScale();
+    emit();
     if (!quiet) toast(`Size ${Math.round(state.scale * 100)}%`);
   }
 
@@ -106,6 +110,7 @@ export function initDisplay({ onFontChange, onEditorChange, toast }) {
     state.font = clamp(Math.round(px), FONT_MIN, FONT_MAX);
     save();
     applyFont();
+    emit();
   }
 
   /* ---------- Look ---------- */
@@ -127,6 +132,7 @@ export function initDisplay({ onFontChange, onEditorChange, toast }) {
     state.panels = name;
     save();
     applyLook();
+    emit();
   }
 
   /* ---------- Editor ---------- */
@@ -144,6 +150,7 @@ export function initDisplay({ onFontChange, onEditorChange, toast }) {
     save();
     editorSeg.set(state.editor);
     onEditorChange?.(state.editor === "vim");
+    emit();
   }
 
   /* ---------- Buttons ---------- */
@@ -177,5 +184,16 @@ export function initDisplay({ onFontChange, onEditorChange, toast }) {
     }
   } catch (_) { /* fine */ }
 
-  return { state, popover, stepScale, resetScale };
+  return {
+    state,
+    popover,
+    stepScale,
+    resetScale,
+    setScale,
+    setFont,
+    setLook,
+    setEditor,
+    /** Be told when any of these change (the Settings tab keeps itself up to date this way). */
+    subscribe: (fn) => (listeners.add(fn), () => listeners.delete(fn)),
+  };
 }

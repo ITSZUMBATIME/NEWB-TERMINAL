@@ -2,13 +2,14 @@
 // the AKIN logo made of characters, then the system info as a centred table.
 // Because it is ordinary terminal text, it scrolls away like any other output
 // and takes no permanent space.
+import { THEME } from "./theme.js";
 
 import { stripAnsi, parseAnsi, cutPieces, piecesToAnsi } from "./ansi.js";
 import { STYLES, sampleLogo, charFor, SCRAMBLE, LOGO_ASPECT_RATIO } from "./asciilogo.js";
 
 const ESC = "\x1b[";
 const RESET = `${ESC}0m`;
-const BG = [20, 22, 26]; // the terminal background
+const bgRgb = () => [1, 3, 5].map((i) => parseInt(THEME.background.slice(i, i + 2), 16)); // the terminal background
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const width = (s) => [...stripAnsi(s)].length;
@@ -27,6 +28,7 @@ function logoColumns(termCols, termRows) {
 /** The logo as lines of coloured text. `t` is ms since the start (null = fully settled). */
 function logoLines(grid, style, t, margin) {
   const cfg = STYLES[style];
+  const BG = bgRgb();
   const [cr, cg, cb] = cfg.color;
   // A faint tint behind the characters keeps the gothic shape solid.
   const tint = BG.map((b, i) => Math.round(b + (cfg.color[i] - b) * 0.24));

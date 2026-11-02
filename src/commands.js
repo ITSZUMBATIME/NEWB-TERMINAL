@@ -190,6 +190,7 @@ export const SHORTCUTS = [
   {
     name: "Panels",
     rows: [
+      { keys: ["Ctrl", ","], what: "Open Settings" },
       { keys: ["Ctrl", "Shift", "E"], what: "Show or hide Files" },
       { keys: ["Ctrl", "Shift", "F"], what: "Search the text inside a project" },
       { keys: ["Ctrl", "Shift", "B"], what: "Show the editor beside the terminal" },

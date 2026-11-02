@@ -21,9 +21,13 @@ import { createDragger } from "./drag.js";
 import { shellPath, segmented, askChoice, el } from "./ui.js";
 import { createEditor } from "./editor.js";
 import { parseSpec, startTemplate, handleTemplateKey, cancelTemplate, fillBlank, refresh as refreshTemplate } from "./template.js";
-import { AsciiLogo, ASCII_STYLES } from "./asciilogo.js";
+import { AsciiLogo, ASCII_STYLES, setLogoColors } from "./asciilogo.js";
+import { initThemes, onThemeChange, hexToRgb } from "./themes.js";
+import { createSettingsView } from "./settings.js";
 
-// A tab is either a terminal ("term") or a text editor ("editor").
+initThemes(); // colours first, so nothing flashes the wrong theme
+
+// A tab is a terminal ("term"), a text editor ("editor") or the Settings page ("settings").
 const isTerm = (tab) => tab?.kind === "term";
 let lastTermId = null; // the terminal you were in last, so the explorer keeps following it
 let lastEditorId = null; // and the editor, for the side-by-side view
@@ -468,6 +472,12 @@ async function newTab() {
       return false;
     }
 
+    if (e.type === "keydown" && e.ctrlKey && !e.altKey && !e.shiftKey && e.key === ",") {
+      e.preventDefault();
+      openSettings();
+      return false;
+    }
+
     // Interface size: Ctrl +, Ctrl -, Ctrl 0
     if (e.type === "keydown" && e.ctrlKey && !e.altKey && display) {
       if (e.key === "=" || e.key === "+") {
@@ -630,6 +640,48 @@ async function openFile(path, at) {
   if (at) tab.editor.goTo(at.line, at.col, at.len);
 }
 
+// The Settings page lives in a tab of its own (only one). It borrows the editor tab's plumbing,
+// so it gets a do-nothing "editor" with the few methods the rest of the code calls.
+function openSettings(sectionId) {
+  const existing = tabs.find((t) => t.kind === "settings");
+  if (existing) {
+    activate(existing.id);
+    if (sectionId) existing.view.show(sectionId);
+    return;
+  }
+  const id = nextId++;
+  const pane = document.createElement("div");
+  pane.className = "pane";
+  panesEl.appendChild(pane);
+  const holder = document.createElement("div");
+  holder.className = "settings-host";
+  pane.appendChild(holder);
+
+  const tabEl = document.createElement("div");
+  tabEl.className = "tab editor-tab";
+  const labelEl = el("span", "label", "Settings");
+  const closeEl = document.createElement("button");
+  closeEl.className = "close";
+  closeEl.append(icon("close"));
+  closeEl.title = "Close tab (Ctrl+Shift+W)";
+  tabEl.append(icon("display"), labelEl, closeEl);
+  tabsEl.appendChild(tabEl);
+
+  const view = createSettingsView({ host: holder, display, toast });
+  const tab = {
+    id, kind: "settings", path: null, name: "Settings", pane, holder, s: 0, tabEl, labelEl, opened: true, dirty: false, view,
+    editor: { focus() {}, insertText() {}, goTo() {}, setVim() {}, setTheme() {}, getText: () => "", markSaved() {}, destroy: () => view.destroy() },
+  };
+  tabs.push(tab);
+  tabEl.addEventListener("click", () => activate(id));
+  closeEl.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeTab(id);
+  });
+  activate(id);
+  if (sectionId) view.show(sectionId);
+}
+
 // Ask what to do with unsaved changes. Returns true if the tab may close.
 async function okToClose(tab) {
   if (!tab.dirty) return true;
@@ -680,7 +732,7 @@ async function closeTab(id, alreadyExited = false) {
 // A file or folder was renamed in Files/Repos: open editor tabs follow it.
 function pathChanged(from, to) {
   for (const t of tabs) {
-    if (isTerm(t) || !(t.path === from || t.path.startsWith(`${from}/`))) continue;
+    if (isTerm(t) || !t.path || !(t.path === from || t.path.startsWith(`${from}/`))) continue;
     t.path = to + t.path.slice(from.length);
     t.name = t.path.slice(t.path.lastIndexOf("/") + 1);
     t.labelEl.textContent = t.name;
@@ -690,7 +742,7 @@ function pathChanged(from, to) {
 
 // A file or folder went to the trash: close its editor tabs (nothing left to save to).
 function pathTrashed(path) {
-  for (const t of tabs.filter((x) => !isTerm(x) && (x.path === path || x.path.startsWith(`${path}/`)))) {
+  for (const t of tabs.filter((x) => !isTerm(x) && x.path && (x.path === path || x.path.startsWith(`${path}/`)))) {
     t.dirty = false;
     closeTab(t.id);
   }
@@ -731,6 +783,21 @@ async function start() {
       for (const t of tabs) if (!isTerm(t)) t.editor.setVim(isVim);
     },
   });
+  // Everything that is drawn in JavaScript follows the theme.
+  onThemeChange((theme) => {
+    setLogoColors({ code: hexToRgb(theme.green), shade: hexToRgb(theme.ink), dots: hexToRgb(theme.accent) });
+    for (const t of tabs) {
+      if (isTerm(t)) t.term.options.theme = { ...THEME };
+      else t.editor.setTheme(theme);
+    }
+    if (infoModel) renderWeb(infoModel, infoEls);
+    if (asciiLogo.style) asciiLogo.setStyle(asciiLogo.style); // redraw in the new colours
+  }, true);
+  document.getElementById("open-settings").addEventListener("click", () => {
+    display.popover.close();
+    openSettings();
+  });
+
   // Shortcuts when the keyboard is NOT on the terminal (the terminal has its own handler above).
   window.addEventListener("keydown", (e) => {
     if (e.target.closest?.(".xterm") || !e.ctrlKey || e.altKey) return;
@@ -746,6 +813,9 @@ async function start() {
       else if (k === "f") explorerApi?.showSearch();
       else if (k === "b") toggleSplit();
       else if (k === "l") cycleLogo();
+    } else if (e.key === "," && !e.shiftKey) {
+      e.preventDefault();
+      openSettings();
     } else if (e.key === "=" || e.key === "+") {
       e.preventDefault();
       display.stepScale(1);

@@ -4,12 +4,12 @@
 
 import { EditorView, keymap } from "@codemirror/view";
 import { EditorState, Compartment, Prec } from "@codemirror/state";
-import { StreamLanguage } from "@codemirror/language";
+import { StreamLanguage, HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { tags as t } from "@lezer/highlight";
 import { indentWithTab } from "@codemirror/commands";
 import { basicSetup } from "codemirror";
-import { oneDark } from "@codemirror/theme-one-dark";
 import { vim, Vim } from "@replit/codemirror-vim";
-import { THEME } from "./theme.js";
+import { currentTheme, hexToRgb, toHex, mix } from "./themes.js";
 
 const legacy = (loader, name) => () => loader().then((m) => StreamLanguage.define(m[name]));
 
@@ -44,22 +44,50 @@ function languageFor(path) {
   return LANGUAGES[ext] || null;
 }
 
-// Fit the editor in with the rest of NEWB.
-const look = EditorView.theme(
-  {
-    "&": { height: "100%", backgroundColor: THEME.background, color: THEME.foreground, fontSize: "var(--term-font, 14px)" },
-    "&.cm-focused": { outline: "none" },
-    ".cm-scroller": { fontFamily: '"JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono", monospace', lineHeight: "1.55" },
-    ".cm-content": { padding: "8px 0" },
-    ".cm-gutters": { backgroundColor: THEME.background, color: "#5b616b", border: "none", borderRight: "1px solid #1d2128" },
-    ".cm-activeLine": { backgroundColor: "#181b21" },
-    ".cm-activeLineGutter": { backgroundColor: "#181b21", color: "#9aa1ad" },
-    ".cm-cursor": { borderLeftColor: THEME.cursor },
-    ".cm-panels": { backgroundColor: "#12151a", color: THEME.foreground },
-    ".cm-panels.cm-panels-bottom": { borderTop: "1px solid #232830" },
-  },
-  { dark: true },
-);
+// The editor's colours come from the chosen theme (see themes.js), so it matches everything else.
+function themeExtension(theme) {
+  const blend = (p) => toHex(mix(hexToRgb(theme.bg), hexToRgb(theme.ink), p));
+  const muted = blend(0.5);
+  const look = EditorView.theme(
+    {
+      "&": { height: "100%", backgroundColor: theme.bg, color: theme.ink, fontSize: "var(--term-font, 14px)" },
+      "&.cm-focused": { outline: "none" },
+      ".cm-scroller": { fontFamily: '"JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono", monospace', lineHeight: "1.55" },
+      ".cm-content": { padding: "8px 0", caretColor: theme.ink },
+      ".cm-gutters": { backgroundColor: theme.bg, color: blend(0.32), border: "none", borderRight: `1px solid ${blend(0.07)}` },
+      ".cm-activeLine": { backgroundColor: blend(0.05) },
+      ".cm-activeLineGutter": { backgroundColor: blend(0.05), color: blend(0.6) },
+      ".cm-cursor": { borderLeftColor: theme.ink },
+      ".cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": { backgroundColor: blend(0.2) },
+      ".cm-selectionMatch": { backgroundColor: blend(0.12) },
+      ".cm-panels": { backgroundColor: blend(0.04), color: theme.ink },
+      ".cm-panels.cm-panels-bottom": { borderTop: `1px solid ${blend(0.1)}` },
+      ".cm-searchMatch": { backgroundColor: blend(0.15), outline: `1px solid ${blend(0.3)}` },
+      ".cm-tooltip": { backgroundColor: blend(0.06), border: `1px solid ${blend(0.12)}`, color: theme.ink },
+    },
+    { dark: theme.dark },
+  );
+  const colours = HighlightStyle.define([
+    { tag: [t.keyword, t.controlKeyword, t.operatorKeyword, t.modifier, t.moduleKeyword], color: theme.purple },
+    { tag: [t.string, t.special(t.string), t.regexp, t.character], color: theme.green },
+    { tag: [t.number, t.bool, t.null, t.atom, t.self], color: theme.orange },
+    { tag: [t.comment, t.lineComment, t.blockComment, t.docComment], color: muted, fontStyle: "italic" },
+    { tag: [t.function(t.variableName), t.function(t.propertyName), t.definition(t.function(t.variableName))], color: theme.accent },
+    { tag: [t.typeName, t.className, t.namespace, t.definition(t.typeName)], color: theme.amber },
+    { tag: [t.propertyName, t.variableName, t.name], color: theme.ink },
+    { tag: [t.attributeName, t.labelName], color: theme.amber },
+    { tag: [t.operator, t.url, t.escape], color: theme.cyan },
+    { tag: [t.punctuation, t.separator, t.bracket, t.meta], color: muted },
+    { tag: [t.tagName, t.heading, t.deleted], color: theme.red },
+    { tag: t.heading, fontWeight: "bold" },
+    { tag: t.strong, fontWeight: "bold" },
+    { tag: t.emphasis, fontStyle: "italic" },
+    { tag: [t.link, t.inserted], color: theme.accent },
+    { tag: t.link, textDecoration: "underline" },
+    { tag: t.invalid, color: theme.red },
+  ]);
+  return Prec.highest([look, syntaxHighlighting(colours)]);
+}
 
 // Vim's :w and :q are shared across editors, so we look up which editor is asking.
 const handlers = new WeakMap();
@@ -80,7 +108,7 @@ function setUpVimCommands() {
 
 /**
  * options: { host, path, text, vim, onDirty(bool), onSave(), onClose() }
- * returns { getText, markSaved, setVim, insertText, focus, destroy }
+ * returns { getText, markSaved, setVim, setTheme, insertText, goTo, focus, destroy }
  */
 export function createEditor({ host, path, text, vim: vimOn, onDirty, onSave, onClose }) {
   setUpVimCommands();
@@ -88,6 +116,7 @@ export function createEditor({ host, path, text, vim: vimOn, onDirty, onSave, on
   const doc = crlf ? text.replace(/\r\n/g, "\n") : text;
   const langBox = new Compartment();
   const vimBox = new Compartment();
+  const themeBox = new Compartment();
   let saved = null; // the document as last saved, to tell if there is anything unsaved
 
   const view = new EditorView({
@@ -105,8 +134,7 @@ export function createEditor({ host, path, text, vim: vimOn, onDirty, onSave, on
         // Swallow them here so only NEWB's meaning happens.
         Prec.highest(keymap.of(["k", "l", "s", "d", "e", "t", "w", "f", "b"].map((k) => ({ key: `Mod-Shift-${k}`, run: () => true })))),
         langBox.of([]),
-        oneDark,
-        Prec.highest(look), // after oneDark, so NEWB's own colours win
+        themeBox.of(themeExtension(currentTheme())),
         EditorView.updateListener.of((u) => {
           if (u.docChanged) onDirty(!u.state.doc.eq(saved));
         }),
@@ -131,6 +159,9 @@ export function createEditor({ host, path, text, vim: vimOn, onDirty, onSave, on
     markSaved() {
       saved = view.state.doc;
       onDirty(false);
+    },
+    setTheme(theme) {
+      view.dispatch({ effects: themeBox.reconfigure(themeExtension(theme)) });
     },
     setVim(on) {
       view.dispatch({ effects: vimBox.reconfigure(on ? vim() : []) });

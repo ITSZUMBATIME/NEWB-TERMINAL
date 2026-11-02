@@ -18,6 +18,17 @@ export const STYLES = {
 };
 
 export const ASCII_STYLES = Object.keys(STYLES);
+
+/** Recolour the logo styles for a theme. Each value is [r, g, b]. */
+export function setLogoColors({ code, shade, dots }) {
+  const set = (name, rgb, alpha) => {
+    STYLES[name].color = rgb;
+    STYLES[name].glow = `rgba(${rgb.join(", ")}, ${alpha})`;
+  };
+  set("code", code, 0.45);
+  set("shade", shade, 0.3);
+  set("dots", dots, 0.4);
+}
 export const LOGO_ASPECT_RATIO = LOGO_ASPECT;
 
 const RAMP = " .:-=+*#%@";
