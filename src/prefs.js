@@ -13,6 +13,8 @@ export const DEFAULT_PREFS = {
   lineNumbers: true,
   showRepos: true,
   showSearch: true,
+  logoText: "AKIN", // what the welcome logo says
+  logoFont: "vortex", // vortex | metal-mania | mono | file:<name of a font in the fonts folder>
 };
 
 let state = { ...DEFAULT_PREFS };

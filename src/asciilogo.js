@@ -1,12 +1,13 @@
-// Draws the AKIN logo out of characters ("ASCII art").
-// The shape comes from the real logo file, so the gothic outline is kept.
+// Draws the logo out of characters ("ASCII art").
+// The shape comes from the built-in AKIN picture (traced from the FT Vortex font), or from
+// any text you type drawn in a font you choose. See logo.js for how that choice is made.
 // Two ways to show it:
 //   - AsciiLogo: animated, on a canvas (used by the pinned layout)
 //   - sampleLogo + charFor: the raw character grid (used by the printed banner)
 
 import logoUrl from "./assets/akin-logo.svg?url";
 
-const LOGO_ASPECT = 1312 / 520; // width / height of the logo shape
+const BUILTIN_ASPECT = 1312 / 520; // width / height of the built-in logo shape
 
 export const STYLES = {
   // Classic ASCII: heavy characters in the middle, lighter ones on the edges.
@@ -29,24 +30,81 @@ export function setLogoColors({ code, shade, dots }) {
   set("shade", shade, 0.3);
   set("dots", dots, 0.4);
 }
-export const LOGO_ASPECT_RATIO = LOGO_ASPECT;
 
 const RAMP = " .:-=+*#%@";
 const INTERIOR = ["@", "@", "#", "%"];
 const FONT = '"JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono", monospace';
 export const SCRAMBLE = "01#%@+*:<>/\\";
 
-let imagePromise = null;
-function loadImage() {
-  if (!imagePromise) {
-    imagePromise = new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = reject;
-      img.src = logoUrl;
-    });
+/* ---------- What the logo shows ---------- */
+
+// { kind: "svg" }                      the built-in AKIN picture
+// { kind: "text", text, family, weight }   some text in a font
+let source = { kind: "svg" };
+let logoPromise = null;
+
+/** Change what the logo shows. Nothing is drawn until the next layout (see AsciiLogo.refresh). */
+export function setLogoSource(next) {
+  source = next;
+  logoPromise = null;
+}
+
+function loadSvg() {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ img, aspect: BUILTIN_ASPECT });
+    img.onerror = reject;
+    img.src = logoUrl;
+  });
+}
+
+/** Draw the text big on a hidden canvas, trimmed to the letters, so it can be sampled like a picture. */
+async function renderText({ text, family, weight = "400" }) {
+  const size = 320;
+  const font = `${weight} ${size}px ${family}`;
+  try {
+    await document.fonts.load(font, text);
+  } catch (_) { /* draw with whatever is there */ }
+  const probe = document.createElement("canvas").getContext("2d");
+  probe.font = font;
+  const m = probe.measureText(text);
+  // A thin outline in the same colour fattens thin strokes, which would otherwise vanish when the
+  // letters are turned into a grid of characters.
+  const stroke = Math.round(size * 0.035);
+  const pad = Math.round(size * 0.06) + stroke;
+  const inkW = Math.ceil(m.actualBoundingBoxLeft + m.actualBoundingBoxRight);
+  const inkH = Math.ceil(m.actualBoundingBoxAscent + m.actualBoundingBoxDescent);
+  // Very short text would make a narrow, tall logo with mushy characters, so give it some room.
+  const w = Math.max(inkW + pad * 2, Math.round((inkH + pad * 2) * 1.2));
+  const h = inkH + pad * 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.font = font;
+  ctx.fillStyle = "#000";
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = stroke;
+  ctx.lineJoin = "round";
+  ctx.textBaseline = "alphabetic";
+  const x = Math.round((w - inkW) / 2 + m.actualBoundingBoxLeft);
+  const y = pad + Math.ceil(m.actualBoundingBoxAscent);
+  ctx.strokeText(text, x, y);
+  ctx.fillText(text, x, y);
+  return { img: canvas, aspect: w / h };
+}
+
+function loadLogo() {
+  if (!logoPromise) {
+    const mine = source;
+    logoPromise = (mine.kind === "text" ? renderText(mine) : loadSvg()).catch(() => loadSvg());
   }
-  return imagePromise;
+  return logoPromise;
+}
+
+/** Width divided by height of whatever the logo is showing now. */
+export async function logoAspect() {
+  return (await loadLogo()).aspect;
 }
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -56,8 +114,8 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
  * cell the logo covers (0 to 1). `cellAspect` is how much taller a cell is than wide.
  */
 export async function sampleLogo(cols, cellAspect, softEdges = true, edgeBoost = 0.6) {
-  const rows = Math.max(6, Math.round(cols / LOGO_ASPECT / cellAspect));
-  const img = await loadImage();
+  const { img, aspect } = await loadLogo();
+  const rows = Math.max(6, Math.round(cols / aspect / cellAspect));
 
   const px = 4;
   const off = document.createElement("canvas");
@@ -145,9 +203,14 @@ export class AsciiLogo {
     if (!this.style) return;
     const style = this.style;
     const cfg = STYLES[style];
-    const rect = this.canvas.getBoundingClientRect();
-    if (rect.width < 10) return;
     const token = ++this.layoutToken;
+
+    // Find out what the logo is first: its shape decides how big the canvas should be.
+    const logo = await loadLogo();
+    if (this.style !== style || token !== this.layoutToken) return;
+    document.documentElement.style.setProperty("--logo-aspect", String(logo.aspect));
+    const rect = this.canvas.getBoundingClientRect(); // measured after the size above took effect
+    if (rect.width < 10) return;
 
     const dpr = window.devicePixelRatio || 1;
     const width = Math.round(rect.width * dpr);
@@ -158,7 +221,6 @@ export class AsciiLogo {
     const cell = Math.max(cfg.cell, 6.5 / dpr);
     const cols = clamp(Math.round(rect.width / cell), 30, 140);
     const grid = await sampleLogo(cols, cfg.cellAspect, style !== "dots");
-    const img = await loadImage();
     // A newer layout started while we waited (or the style changed): let that one finish.
     if (this.style !== style || token !== this.layoutToken) return;
 
@@ -168,12 +230,12 @@ export class AsciiLogo {
     ghost.width = width;
     ghost.height = height;
     const gctx = ghost.getContext("2d");
-    gctx.drawImage(img, 0, 0, ghost.width, ghost.height);
+    gctx.drawImage(logo.img, 0, 0, ghost.width, ghost.height);
     gctx.globalCompositeOperation = "source-in";
     gctx.fillStyle = `rgb(${gr},${gg},${gb})`;
     gctx.fillRect(0, 0, ghost.width, ghost.height);
 
-    // Only the first picture of a style shuffles in. Resizing or recolouring just redraws it.
+    // Only the first picture of a style (or a new logo) shuffles in. Resizing or recolouring just redraws it.
     const fresh = !this.cov || this.drawnStyle !== style;
 
     // Swap everything in one go. Resizing a canvas wipes it, so we do that last and draw
@@ -190,6 +252,12 @@ export class AsciiLogo {
     this.ghost = style === "dots" ? null : ghost;
     if (fresh) this.startedAt = performance.now();
     this.frame();
+  }
+
+  /** The logo's source changed (see setLogoSource): draw it afresh, letters shuffling in. */
+  refresh() {
+    this.cov = null;
+    this.layout();
   }
 
   frame() {

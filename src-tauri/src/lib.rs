@@ -2,6 +2,7 @@
 // Its job: start a real shell (bash, zsh...) for each tab, pass the keys you type
 // into it, and pass everything the shell prints back to the window.
 
+mod fonts;
 mod fsinfo;
 mod repo;
 mod sysinfo;
@@ -230,6 +231,7 @@ pub fn run() {
             repo::git_commit,
             repo::git_sync,
             repo::search_project,
+            fonts::scan_fonts,
             themes::scan_themes,
             themes::install_theme,
             sysinfo::system_info

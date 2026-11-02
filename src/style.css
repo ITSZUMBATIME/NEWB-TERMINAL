@@ -192,8 +192,10 @@ html, body, #app {
    would be, so the letters stay readable. */
 #ascii-logo {
   display: block;
-  height: calc(var(--logo-h) * 1.5);
-  width: calc(var(--logo-h) * 1.5 * 2.523);
+  /* The shape follows the logo (set from asciilogo.js). Long text shrinks to fit the width. */
+  width: min(calc(var(--logo-h) * 1.5 * var(--logo-aspect, 2.523)), 100%);
+  height: auto;
+  aspect-ratio: var(--logo-aspect, 2.523);
   cursor: pointer;
 }
 
@@ -663,10 +665,6 @@ html[data-panels="terminal"] .subtab.on { border-bottom-color: var(--x3fb950); }
 .stepper { display: flex; align-items: center; gap: 6px; }
 .seg { flex-wrap: nowrap; }
 .seg button { padding: 7px 4px; }
-.tips { font-size: 12.5px; line-height: 1.5; }
-.tips p { margin: 0 0 9px 0; }
-.tips b { color: var(--text); }
-.tips kbd { font-size: 11px; }
 
 .ctx { position: fixed; z-index: 80; min-width: 190px; padding: 5px; background: var(--x12151a); border: 1px solid var(--x2c313a); border-radius: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6); font-size: 13px; }
 .ctx[hidden] { display: none; }
@@ -931,9 +929,6 @@ html[data-show-search="0"] [data-fxview="search"] { display: none; }
 .st-nav-item.on { background: var(--x1c2a3f); color: var(--text); }
 .seg button { white-space: nowrap; }
 
-.st-links { display: flex; gap: 18px; margin-top: 6px; }
-.st-links .link-btn { font-size: 12px; }
-.st-block .tips { margin-top: 8px; }
 
 /* Your own themes: a small edit / trash pair appears on a card when you hover it. */
 .theme-wrap { position: relative; }
@@ -945,3 +940,15 @@ html[data-show-search="0"] [data-fxview="search"] { display: none; }
 .st-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 10px 0; }
 .st-block .st-add { margin-top: 10px; }
 .theme-wrap .theme-card { width: 100%; }
+
+/* Logo block in Appearance */
+.st-input-short { flex: none; width: 150px; }
+.st-select {
+  flex: none; min-width: 170px; padding: 6px 28px 6px 9px;
+  background: var(--x0c0e11) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>") no-repeat right 9px center;
+  border: 1px solid var(--x2c313a); border-radius: 6px; color: var(--text);
+  font: inherit; font-size: 12.5px; outline: none; appearance: none; -webkit-appearance: none; cursor: pointer;
+}
+.st-select:focus { border-color: var(--accent); }
+.st-select option { background: var(--x12151a); color: var(--text); }
+.st-hint.warn { color: var(--xe0a63a); }

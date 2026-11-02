@@ -5,7 +5,7 @@
 import { THEME } from "./theme.js";
 
 import { stripAnsi, parseAnsi, cutPieces, piecesToAnsi } from "./ansi.js";
-import { STYLES, sampleLogo, charFor, SCRAMBLE, LOGO_ASPECT_RATIO } from "./asciilogo.js";
+import { STYLES, sampleLogo, charFor, SCRAMBLE, logoAspect } from "./asciilogo.js";
 
 const ESC = "\x1b[";
 const RESET = `${ESC}0m`;
@@ -17,11 +17,11 @@ const padTo = (s, w) => s + " ".repeat(Math.max(0, w - width(s)));
 const fg = (r, g, b) => `${ESC}38;2;${r};${g};${b}m`;
 
 /** How many character columns wide the logo should be for this terminal. */
-function logoColumns(termCols, termRows) {
+function logoColumns(termCols, termRows, aspect) {
   let cols = Math.round(termCols * 0.38);
   // Don't let the logo take more than about a third of the height.
   const maxRows = Math.max(7, Math.floor(termRows * 0.32));
-  cols = Math.min(cols, Math.floor(maxRows * 2 * LOGO_ASPECT_RATIO));
+  cols = Math.min(cols, Math.floor(maxRows * 2 * aspect));
   return Math.max(24, Math.min(cols, 90, termCols - 2));
 }
 
@@ -144,14 +144,15 @@ export async function printBanner(term, model, { style, animate }) {
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // Make everything fit on screen: first drop the colour blocks, then shrink the logo.
-  const rowsFor = (c) => Math.max(6, Math.round(c / LOGO_ASPECT_RATIO / 2));
+  const aspect = await logoAspect();
+  const rowsFor = (c) => Math.max(6, Math.round(c / aspect / 2));
   const avail = term.rows - 3; // room for the prompt and a little breathing space
-  let logoCols = logoColumns(term.cols, term.rows);
+  let logoCols = logoColumns(term.cols, term.rows, aspect);
   let info = infoLines(model, term.cols, true);
   if (1 + rowsFor(logoCols) + info.length > avail) info = infoLines(model, term.cols, false);
   const room = avail - 1 - info.length;
   if (rowsFor(logoCols) > room) {
-    logoCols = Math.max(24, Math.floor(Math.max(6, room) * 2 * LOGO_ASPECT_RATIO));
+    logoCols = Math.max(24, Math.floor(Math.max(6, room) * 2 * aspect));
   }
 
   const grid = await sampleLogo(logoCols, 2, true, 0.9);

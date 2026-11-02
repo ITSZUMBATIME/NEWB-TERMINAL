@@ -26,6 +26,7 @@ import { prefs } from "./prefs.js";
 import pkg from "../package.json";
 import { createSettingsView } from "./settings.js";
 import { initCustomThemes } from "./customthemes.js";
+import { initLogo } from "./logo.js";
 
 initThemes(); // colours first, so nothing flashes the wrong theme
 
@@ -148,6 +149,7 @@ async function loadInfo() {
 let drawersApi = null;
 let display = null;
 let customThemes = null;
+let logoApi = null;
 let explorerApi = null;
 let homeDir = "";
 
@@ -692,11 +694,14 @@ function openSettings(sectionId) {
     welcome: welcomeApi,
     projects: explorerApi?.repos,
     version: pkg.version,
-    openCheats: () => drawersApi?.open("tree"),
-    openKeys: () => drawersApi?.open("keys"),
     themes: customThemes,
+    logo: logoApi,
     showThemesFolder: () => {
       const folder = customThemes?.dir();
+      if (folder) typeText(`cd ${shellPath(folder, homeDir)}`);
+    },
+    showFontsFolder: () => {
+      const folder = logoApi?.dir();
       if (folder) typeText(`cd ${shellPath(folder, homeDir)}`);
     },
   });
@@ -984,6 +989,9 @@ async function start() {
   // After clicking a control, hand the keyboard back to the terminal so shortcuts keep working.
   const focusTerminal = focusActive;
   document.getElementById("ascii-logo").addEventListener("click", () => { cycleLogo(); focusTerminal(); });
+
+  // What the logo says and which font it uses (chosen in Settings > Appearance).
+  logoApi = initLogo({ onChange: () => asciiLogo.refresh() });
 
   mountIcons(); // fill in the little pictures on the buttons
 

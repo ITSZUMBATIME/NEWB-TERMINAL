@@ -45,7 +45,8 @@ pub struct ThemeScan {
     themes: Option<Vec<ThemeFolder>>,
 }
 
-fn themes_dir() -> Result<PathBuf, String> {
+/// A folder inside ~/.config/newb (made if it isn't there yet).
+pub fn config_subdir(name: &str) -> Result<PathBuf, String> {
     let base = match std::env::var_os("XDG_CONFIG_HOME") {
         Some(v) if !v.is_empty() => PathBuf::from(v),
         _ => {
@@ -53,9 +54,13 @@ fn themes_dir() -> Result<PathBuf, String> {
             PathBuf::from(home).join(".config")
         }
     };
-    let dir = base.join("newb").join("themes");
-    fs::create_dir_all(&dir).map_err(|e| format!("Can't make the themes folder: {e}"))?;
+    let dir = base.join("newb").join(name);
+    fs::create_dir_all(&dir).map_err(|e| format!("Can't make the {name} folder: {e}"))?;
     Ok(dir)
+}
+
+fn themes_dir() -> Result<PathBuf, String> {
+    config_subdir("themes")
 }
 
 fn theme_folders(dir: &Path) -> Vec<(String, PathBuf)> {

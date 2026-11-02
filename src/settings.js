@@ -35,10 +35,10 @@ function toggle(on, onChange) {
 }
 
 /**
- * options: { host, display, toast, welcome, projects, version, openCheats(), openKeys(), themes, showThemesFolder() }
+ * options: { host, display, toast, welcome, projects, version, themes, logo, showThemesFolder(), showFontsFolder() }
  * returns { show(sectionId), focus(), destroy() }
  */
-export function createSettingsView({ host, display, toast, welcome, projects, version, openCheats, openKeys, themes, showThemesFolder }) {
+export function createSettingsView({ host, display, toast, welcome, projects, version, themes, logo, showThemesFolder, showFontsFolder }) {
   const rows = []; // { section, el, text } for searching
   const sections = []; // { id, title, el, navEl }
 
@@ -256,6 +256,59 @@ export function createSettingsView({ host, display, toast, welcome, projects, ve
   fontStep.append(fontMinus, fontVal, fontPlus);
   row(look, "Terminal text size", "The size of the letters in the terminal and the editor.", fontStep, "font letters bigger smaller");
 
+  /* ---------- Logo ---------- */
+
+  const logoSeg = choice(welcome.logos(), welcome.logo(), (id) => welcome.setLogo(id));
+  let fontSelect = null;
+  let fontRowHint = null;
+  let fontsFolderHint = null;
+  if (logo) {
+    const logoText = el("input", "st-input st-input-short");
+    logoText.type = "text";
+    logoText.maxLength = logo.maxChars;
+    logoText.spellcheck = false;
+    logoText.autocomplete = "off";
+    logoText.value = logo.text();
+    let typing = null;
+    logoText.addEventListener("input", () => {
+      clearTimeout(typing);
+      typing = setTimeout(() => logo.setText(logoText.value), 300);
+    });
+    logoText.addEventListener("blur", () => { logoText.value = logo.text(); });
+    row(look, "Logo text", `What the big logo at the top says. Short words look best (up to ${logo.maxChars} characters).`, logoText, "logo text name word akin newb");
+
+    fontSelect = el("select", "st-select");
+    fontSelect.addEventListener("change", () => logo.setFont(fontSelect.value));
+    const fontRow = row(look, "Logo font", "The letters the logo is drawn in.", fontSelect, "logo font vortex metal mania gothic");
+    fontRowHint = fontRow.querySelector(".st-hint");
+  }
+  row(look, "Logo style", "How the logo is drawn: with 0s and 1s, dots or shaded characters.", logoSeg.el, "logo style ascii code dot matrix shade");
+  if (logo) {
+    const fontsBtn = el("button", "st-btn", "Show the fonts folder");
+    fontsBtn.type = "button";
+    fontsBtn.addEventListener("click", () => showFontsFolder?.());
+    const fontsRow = row(look, "Your own fonts", "", fontsBtn, "logo fonts folder add install ttf otf vortex file");
+    fontsFolderHint = fontsRow.querySelector(".st-hint") || fontsRow.querySelector(".st-text").appendChild(el("div", "st-hint"));
+  }
+
+  function showLogoFonts() {
+    if (!logo || !fontSelect) return;
+    const options = logo.options();
+    fontSelect.replaceChildren(
+      ...options.map((o) => {
+        const opt = el("option", "", o.label);
+        opt.value = o.id;
+        return opt;
+      }),
+    );
+    fontSelect.value = options.some((o) => o.id === logo.font()) ? logo.font() : "metal-mania";
+    fontRowHint.textContent = logo.note() || "The letters the logo is drawn in.";
+    fontRowHint.classList.toggle("warn", Boolean(logo.note()));
+    fontsFolderHint.textContent = `Put a font file (.ttf or .otf) in ${logo.prettyDir()} and it shows up in the list above. FT Vortex works this way.`;
+  }
+  const unsubscribeLogo = logo?.subscribe(showLogoFonts);
+  showLogoFonts();
+
   /* ---------- Terminal ---------- */
 
   const term = section("terminal", "Terminal");
@@ -307,8 +360,6 @@ export function createSettingsView({ host, display, toast, welcome, projects, ve
   const hello = section("welcome", "Welcome screen");
   const layoutSeg = choice(welcome.layouts(), welcome.layout(), (id) => welcome.setLayout(id));
   row(hello, "Layout", "The logo and system info at the top of the terminal.", layoutSeg.el, "welcome header logo info text off");
-  const logoSeg = choice(welcome.logos(), welcome.logo(), (id) => welcome.setLogo(id));
-  row(hello, "Logo", "", logoSeg.el, "logo ascii code dot matrix shade");
 
   /* ---------- Projects ---------- */
 
@@ -353,44 +404,7 @@ export function createSettingsView({ host, display, toast, welcome, projects, ve
   /* ---------- About ---------- */
 
   const about = section("about", "About");
-  row(about, `NEWB ${version ? `v${version}` : ""}`, "A terminal for people who are new to the terminal. Open source (MIT): github.com/ITSZUMBATIME/NEWB-TERMINAL", el("span"), "about version help licence");
-
-  // Getting started: the same few tips that used to live behind the (i) button.
-  const tips = el("div", "st-block");
-  tips.append(el("div", "st-label", "Getting started"));
-  const tipList = el("div", "tips");
-  const tip = (bold, rest) => {
-    const p = el("p");
-    p.append(el("b", "", bold), document.createTextNode(` ${rest}`));
-    return p;
-  };
-  const withKeys = (bold, parts) => {
-    const p = el("p");
-    p.append(el("b", "", bold));
-    for (const part of parts) {
-      if (typeof part === "string") p.append(document.createTextNode(part));
-      else p.append(el("kbd", "", part.key));
-    }
-    return p;
-  };
-  tipList.append(
-    tip("Drag a command", "from the Cheat sheet into the terminal. NEWB types it for you and waits. You press Enter when you're happy with it."),
-    withKeys("Blue blanks", [" are for you to fill in. Just type. ", { key: "Tab" }, " jumps to the next blank."]),
-    tip("Drag a file or folder", "from Files into the terminal to type its name, or onto a blank to fill it."),
-    tip("Search in plain English", "in the cheat sheet, like \"delete a file\" or \"wifi\"."),
-    withKeys("Copy and paste:", [" ", { key: "Ctrl" }, "+", { key: "C" }, " copies when text is selected, and stops a running command when it isn't. ", { key: "Ctrl" }, "+", { key: "V" }, " pastes."]),
-    withKeys("Bigger or smaller:", [" ", { key: "Ctrl" }, "+", { key: "+" }, " and ", { key: "Ctrl" }, "+", { key: "-" }, " change the size of everything. Size is under Appearance."]),
-  );
-  const links = el("div", "st-links");
-  const cheats = el("button", "link-btn strong", "Open the cheat sheet");
-  const keys = el("button", "link-btn strong", "See all shortcuts");
-  for (const b of [cheats, keys]) b.type = "button";
-  cheats.addEventListener("click", () => openCheats?.());
-  keys.addEventListener("click", () => openKeys?.());
-  links.append(cheats, keys);
-  tips.append(tipList, links);
-  about.append(tips);
-  rows.push({ section: about, el: tips, text: "getting started tips help drag blanks copy paste zoom cheat sheet shortcuts" });
+  row(about, `NEWB ${version ? `v${version}` : ""}`, "A terminal for people who are new to the terminal. Open source (MIT): github.com/ITSZUMBATIME/NEWB-TERMINAL", el("span"), "about version licence");
 
   const reset = el("button", "st-btn danger", "Reset all settings");
   reset.type = "button";
@@ -436,6 +450,7 @@ export function createSettingsView({ host, display, toast, welcome, projects, ve
     showSearch.set(prefs.get("showSearch"));
     layoutSeg.set(welcome.layout());
     logoSeg.set(welcome.logo());
+    showLogoFonts();
   }
   refresh();
   onThemeChange(refresh);
@@ -474,6 +489,7 @@ export function createSettingsView({ host, display, toast, welcome, projects, ve
     destroy() {
       resizer.disconnect();
       unsubscribeThemes();
+      unsubscribeLogo?.();
       unsubscribe();
       unsubscribePrefs();
       unsubscribeWelcome();
