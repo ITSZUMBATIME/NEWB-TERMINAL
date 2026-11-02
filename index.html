@@ -36,15 +36,31 @@
       <div id="workspace">
         <!-- Left: file explorer. Docked, so it pushes the terminal across. -->
         <aside id="explorer" aria-label="Files" aria-hidden="false">
-          <div class="fx-head">
-            <button id="fx-home" class="fx-btn" data-icon="home" title="Home folder" aria-label="Home folder"></button>
-            <button id="fx-up" class="fx-btn" data-icon="up" title="Up one folder" aria-label="Up one folder"></button>
-            <div id="fx-path" class="fx-path"></div>
-            <button id="fx-follow" class="fx-btn" data-icon="follow" title="Follow the folder the terminal is in" aria-label="Follow the terminal"></button>
-            <button id="fx-hidden" class="fx-btn" data-icon="eye" title="Show hidden files" aria-label="Show hidden files"></button>
-            <button id="fx-refresh" class="fx-btn" data-icon="refresh" title="Refresh" aria-label="Refresh"></button>
+          <nav class="subtabs fx-subtabs">
+            <button class="subtab on" data-fxview="files">Files</button>
+            <button class="subtab" data-fxview="repos">Repos</button>
+          </nav>
+
+          <div id="fx-view-files" class="fx-view">
+            <div class="fx-head">
+              <button id="fx-home" class="fx-btn" data-icon="home" title="Home folder" aria-label="Home folder"></button>
+              <button id="fx-up" class="fx-btn" data-icon="up" title="Up one folder" aria-label="Up one folder"></button>
+              <div id="fx-path" class="fx-path"></div>
+              <button id="fx-follow" class="fx-btn" data-icon="follow" title="Follow the folder the terminal is in" aria-label="Follow the terminal"></button>
+              <button id="fx-hidden" class="fx-btn" data-icon="eye" title="Show hidden files" aria-label="Show hidden files"></button>
+              <button id="fx-refresh" class="fx-btn" data-icon="refresh" title="Refresh" aria-label="Refresh"></button>
+            </div>
+            <div id="fx-tree" class="fx-tree"></div>
           </div>
-          <div id="fx-tree" class="fx-tree"></div>
+
+          <div id="fx-view-repos" class="fx-view" hidden>
+            <div class="fx-head">
+              <div class="fx-path">Your projects</div>
+              <button id="rp-add" class="fx-btn" data-icon="plus" title="Add a folder that holds projects" aria-label="Add a folder"></button>
+              <button id="rp-refresh" class="fx-btn" data-icon="refresh" title="Look again" aria-label="Look again"></button>
+            </div>
+            <div id="rp-list" class="fx-tree"></div>
+          </div>
           <div id="fx-resize" class="fx-resize" title="Drag to resize"></div>
         </aside>
         <div id="panes"></div>
@@ -110,6 +126,12 @@
             <button data-style="flat">Flat</button>
             <button data-style="terminal">Terminal</button>
           </div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><span>Editor</span></div>
+          <div id="seg-editor" class="seg"></div>
+          <p class="pop-hint">Friendly is normal typing. Vim is for people who already know Vim keys.</p>
         </div>
 
         <div class="field">

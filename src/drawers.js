@@ -8,7 +8,7 @@
 // categories files it there.
 
 import { TREE, ESSENTIALS, SHORTCUTS, lookup, lookupTree, hintsFor, flattenTree } from "./commands.js";
-import { el, cmdElement } from "./ui.js";
+import { el, cmdElement, askChoice, miniForm } from "./ui.js";
 import { icon, groupIconName } from "./icons.js";
 
 const FAV_KEY = "akin.favs.v1";
@@ -311,57 +311,6 @@ export function initDrawers({ toast, focusTerminal, panesEl, dragger }) {
   const saveCustom = () => save(CUSTOM_KEY, custom);
   const totalMine = () => custom.reduce((n, c) => n + c.items.length, 0);
 
-  /** A small form for a name or a command. Returns the form element. */
-  function miniForm({ fields, submitLabel, onSave, onCancel, hint }) {
-    const form = el("form", "mini-form");
-    const inputs = fields.map((f) => {
-      const label = el("label", "mini-field");
-      label.append(el("span", "", f.label));
-      const input = el("input");
-      input.type = "text";
-      input.placeholder = f.placeholder || "";
-      input.value = f.value || "";
-      input.spellcheck = false;
-      input.autocomplete = "off";
-      label.append(input);
-      form.append(label);
-      return { f, input };
-    });
-    if (hint) form.append(el("div", "mini-hint", hint));
-    const error = el("div", "mini-error");
-    error.hidden = true;
-    const row = el("div", "mini-buttons");
-    const ok = el("button", "mini-save", submitLabel);
-    ok.type = "submit";
-    const cancel = el("button", "mini-cancel", "Cancel");
-    cancel.type = "button";
-    cancel.addEventListener("click", onCancel);
-    row.append(ok, cancel);
-    form.append(error, row);
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const values = {};
-      for (const { f, input } of inputs) values[f.key] = input.value.trim();
-      const missing = inputs.find(({ f, input }) => f.required && !input.value.trim());
-      if (missing) {
-        error.textContent = `Please fill in: ${missing.f.label}`;
-        error.hidden = false;
-        missing.input.focus();
-        return;
-      }
-      onSave(values);
-    });
-    form.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onCancel();
-      }
-    });
-    // the drag engine and panel shortcuts shouldn't hijack typing in here
-    form.addEventListener("pointerdown", (e) => e.stopPropagation());
-    form.focusFirst = () => inputs[0].input.focus();
-    return form;
-  }
 
   const commandFields = (item = {}) => [
     { key: "name", label: "Name", placeholder: "e.g. Update my game", value: item.name, required: true },
@@ -425,8 +374,19 @@ export function initDrawers({ toast, focusTerminal, panesEl, dragger }) {
     form.focusFirst();
   }
 
-  function deleteCategory(cat) {
-    if (cat.items.length && !window.confirm(`Delete "${cat.name}" and its ${cat.items.length} command${cat.items.length === 1 ? "" : "s"}?`)) return;
+  async function deleteCategory(cat) {
+    if (cat.items.length) {
+      const n = cat.items.length;
+      const pick = await askChoice({
+        title: `Delete "${cat.name}"?`,
+        message: `This also deletes its ${n} command${n === 1 ? "" : "s"}.`,
+        choices: [
+          { id: "delete", label: "Delete", danger: true },
+          { id: "keep", label: "Keep it", primary: true, cancel: true },
+        ],
+      });
+      if (pick !== "delete") return;
+    }
     custom = custom.filter((c) => c.id !== cat.id);
     saveCustom();
     renderMine();

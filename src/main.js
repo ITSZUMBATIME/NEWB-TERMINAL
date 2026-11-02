@@ -16,11 +16,16 @@ import { initExplorer } from "./explorer.js";
 import { initDisplay } from "./display.js";
 import { initAbout } from "./about.js";
 import { handleClipboardKey, initContextMenu } from "./clipboard.js";
-import { icon, mountIcons } from "./icons.js";
+import { icon, mountIcons, fileIcon } from "./icons.js";
 import { createDragger } from "./drag.js";
-import { shellPath, segmented } from "./ui.js";
+import { shellPath, segmented, askChoice, el } from "./ui.js";
+import { createEditor } from "./editor.js";
 import { parseSpec, startTemplate, handleTemplateKey, cancelTemplate, fillBlank, refresh as refreshTemplate } from "./template.js";
 import { AsciiLogo, ASCII_STYLES } from "./asciilogo.js";
+
+// A tab is either a terminal ("term") or a text editor ("editor").
+const isTerm = (tab) => tab?.kind === "term";
+let lastTermId = null; // the terminal you were in last, so the explorer keeps following it
 
 const tabsEl = document.getElementById("tabs");
 const panesEl = document.getElementById("panes");
@@ -136,7 +141,12 @@ const templateIO = (tab) => ({
 // Type a command at the prompt (never presses Enter). Commands with blanks start the fill-in session.
 function insertCommand(cmd, risky) {
   const tab = activeTab();
-  if (!tab || !tab.opened) return;
+  if (!tab) return;
+  if (!isTerm(tab)) {
+    tab.editor.insertText(parseSpec(cmd).text); // in an editor, the command goes into the file
+    return;
+  }
+  if (!tab.opened) return;
   startTemplate(tab, parseSpec(cmd), templateIO(tab));
   keepCursorInView(tab);
   tab.term.focus();
@@ -145,7 +155,7 @@ function insertCommand(cmd, risky) {
 
 // Type plain text (like "cd ~/Projects") at the prompt. Never presses Enter.
 function typeText(text) {
-  const tab = activeTab();
+  const tab = terminalForAction();
   if (!tab || !tab.opened) return;
   startTemplate(tab, { text, blanks: [] }, templateIO(tab));
   keepCursorInView(tab);
@@ -165,7 +175,12 @@ async function cwdOf(tab) {
 
 async function insertPath(path) {
   const tab = activeTab();
-  if (!tab || !tab.opened) return;
+  if (!tab) return;
+  if (!isTerm(tab)) {
+    tab.editor.insertText(path);
+    return;
+  }
+  if (!tab.opened) return;
   const text = shellPath(path, homeDir, await cwdOf(tab));
   const io = templateIO(tab);
   if (!fillBlank(tab, text, io)) io.send(text + " ");
@@ -180,6 +195,7 @@ async function insertPath(path) {
 const headerHeight = () => heroEl.offsetHeight; // 0 when the layout hides it
 
 function applyScroll(tab) {
+  if (!isTerm(tab)) return;
   const H = headerHeight();
   tab.s = Math.max(0, Math.min(H, tab.s));
   if (tab.id === activeId) heroEl.style.transform = `translateY(${-tab.s}px)`;
@@ -188,6 +204,7 @@ function applyScroll(tab) {
 
 // As output fills the screen, slide the header away so the cursor never gets pushed off the bottom.
 function keepCursorInView(tab) {
+  if (!isTerm(tab)) return;
   const H = headerHeight();
   if (!H || tab.id !== activeId || !tab.opened) return;
   const buf = tab.term.buffer.active;
@@ -262,7 +279,7 @@ function handleWheel(tab, e) {
 function scrollFromPanes(e) {
   if (e.target.closest(".xterm")) return;
   const tab = activeTab();
-  if (!tab || !tab.opened) return;
+  if (!isTerm(tab) || !tab.opened) return;
   if (handleWheel(tab, e) === false) return; // the header moved (or it was a zoom)
   const { dy, cellH } = wheelPixels(tab, e);
   if (!dy) return;
@@ -276,11 +293,20 @@ const tabs = []; // each: { id, term, fit, pane, holder, s, tabEl, labelEl, open
 let activeId = null;
 let nextId = 1;
 
+// Give the keyboard back to whatever is on screen: the terminal or the editor.
+function focusActive() {
+  const tab = activeTab();
+  if (!tab) return;
+  if (isTerm(tab)) tab.term.focus();
+  else tab.editor.focus();
+}
+
 function activeTab() {
   return tabs.find((t) => t.id === activeId);
 }
 
 function fitAndResize(tab) {
+  if (!isTerm(tab)) return;
   try {
     tab.fit.fit();
     invoke("pty_resize", { id: tab.id, cols: tab.term.cols, rows: tab.term.rows });
@@ -304,14 +330,20 @@ function activate(id) {
     t.pane.classList.toggle("active", on);
   }
   const tab = activeTab();
-  if (tab) {
+  if (!tab) return;
+  if (isTerm(tab)) {
+    lastTermId = id;
+    heroEl.style.display = ""; // the welcome header belongs to terminals
     tab.pane.prepend(heroEl); // the header travels with the active tab
     applyScroll(tab);
-  }
-  if (tab && tab.opened) {
-    fitAndResize(tab);
-    keepCursorInView(tab);
-    tab.term.focus();
+    if (tab.opened) {
+      fitAndResize(tab);
+      keepCursorInView(tab);
+      tab.term.focus();
+    }
+  } else {
+    heroEl.style.display = "none";
+    tab.editor.focus();
   }
 }
 
@@ -348,7 +380,7 @@ async function newTab() {
   const fit = new FitAddon();
   term.loadAddon(fit);
 
-  const tab = { id, term, fit, pane, holder, s: 0, tabEl, labelEl, opened: false };
+  const tab = { id, kind: "term", term, fit, pane, holder, s: 0, tabEl, labelEl, opened: false };
   tabs.push(tab);
 
   tabEl.addEventListener("click", () => activate(id));
@@ -470,17 +502,116 @@ async function newTab() {
   term.focus();
 }
 
-function closeTab(id, alreadyExited = false) {
-  const i = tabs.findIndex((t) => t.id === id);
+// Save an editor tab. Returns true if it worked.
+async function saveEditor(tab) {
+  try {
+    await invoke("write_text_file", { path: tab.path, text: tab.editor.getText() });
+    tab.editor.markSaved();
+    toast(`Saved ${tab.name}`, 1500);
+    explorerApi?.noteSaved(tab.path);
+    return true;
+  } catch (err) {
+    toast(`Couldn't save ${tab.name}: ${err}`, 6000);
+    return false;
+  }
+}
+
+// Open a file in an editor tab (or jump to it if it is already open).
+async function openFile(path) {
+  const existing = tabs.find((t) => !isTerm(t) && t.path === path);
+  if (existing) {
+    activate(existing.id);
+    return;
+  }
+  let file;
+  try {
+    file = await invoke("read_text_file", { path });
+  } catch (err) {
+    toast(String(err), 6000);
+    return;
+  }
+  const id = nextId++;
+  const name = path.slice(path.lastIndexOf("/") + 1);
+
+  const pane = document.createElement("div");
+  pane.className = "pane";
+  panesEl.appendChild(pane);
+  const holder = document.createElement("div");
+  holder.className = "editor-host";
+  pane.appendChild(holder);
+
+  const tabEl = document.createElement("div");
+  tabEl.className = "tab editor-tab";
+  tabEl.title = path;
+  const labelEl = el("span", "label", name);
+  const dirtyEl = el("span", "tab-dirty");
+  dirtyEl.title = "Not saved yet (Ctrl+S)";
+  dirtyEl.append(icon("edit"));
+  const closeEl = document.createElement("button");
+  closeEl.className = "close";
+  closeEl.append(icon("close"));
+  closeEl.title = "Close tab (Ctrl+Shift+W)";
+  tabEl.append(fileIcon(name, false), labelEl, dirtyEl, closeEl);
+  tabsEl.appendChild(tabEl);
+
+  const tab = { id, kind: "editor", path, name, pane, holder, s: 0, tabEl, labelEl, opened: true, dirty: false };
+  tab.editor = createEditor({
+    host: holder,
+    path,
+    text: file.text,
+    vim: display?.state.editor === "vim",
+    onDirty: (dirty) => {
+      tab.dirty = dirty;
+      tabEl.classList.toggle("dirty", dirty);
+    },
+    onSave: () => saveEditor(tab),
+    onClose: () => closeTab(id),
+  });
+  tabs.push(tab);
+  tabEl.addEventListener("click", () => activate(id));
+  closeEl.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeTab(id);
+  });
+  activate(id);
+}
+
+// Ask what to do with unsaved changes. Returns true if the tab may close.
+async function okToClose(tab) {
+  if (!tab.dirty) return true;
+  const pick = await askChoice({
+    title: `Save changes to ${tab.name}?`,
+    message: "If you don't save, your changes will be lost.",
+    choices: [
+      { id: "save", label: "Save", primary: true },
+      { id: "discard", label: "Don't save", danger: true },
+      { id: "cancel", label: "Cancel", cancel: true },
+    ],
+  });
+  if (pick === "save") return saveEditor(tab);
+  return pick === "discard";
+}
+
+async function closeTab(id, alreadyExited = false) {
+  let tab = tabs.find((t) => t.id === id);
+  if (!tab) return;
+  if (!isTerm(tab) && !(await okToClose(tab))) return;
+
+  const i = tabs.findIndex((t) => t.id === id); // it may have moved while we asked
   if (i === -1) return;
-  const tab = tabs[i];
-  if (!alreadyExited) invoke("pty_kill", { id });
-  cancelTemplate(tab);
-  if (heroEl.parentElement === tab.pane) panesEl.after(heroEl); // rescue the header before the pane goes
-  tab.term.dispose();
+  tab = tabs[i];
+  if (isTerm(tab)) {
+    if (!alreadyExited) invoke("pty_kill", { id });
+    cancelTemplate(tab);
+    if (heroEl.parentElement === tab.pane) panesEl.after(heroEl); // rescue the header before the pane goes
+    tab.term.dispose();
+  } else {
+    tab.editor.destroy();
+  }
   tab.pane.remove();
   tab.tabEl.remove();
   tabs.splice(i, 1);
+  if (lastTermId === id) lastTermId = tabs.find(isTerm)?.id ?? null;
 
   if (tabs.length === 0) {
     invoke("quit_app");
@@ -489,11 +620,25 @@ function closeTab(id, alreadyExited = false) {
   }
 }
 
+// The terminal that commands, paths and "cd" should go to. If you are in an editor, that is the
+// last terminal you used (we switch to it).
+function terminalForAction() {
+  const tab = activeTab();
+  if (isTerm(tab)) return tab;
+  const last = tabs.find((t) => t.id === lastTermId);
+  if (!last) {
+    toast("Open a terminal tab first (Ctrl+Shift+T).", 3000);
+    return null;
+  }
+  activate(last.id);
+  return last;
+}
+
 async function start() {
   // Listen first, so no shell output is missed.
   await listen("pty-output", (e) => {
     const t = tabs.find((x) => x.id === e.payload.id);
-    if (t) t.term.write(e.payload.data);
+    if (t?.term) t.term.write(e.payload.data);
   });
   await listen("pty-exit", (e) => closeTab(e.payload.id, true));
 
@@ -501,9 +646,13 @@ async function start() {
     toast,
     onFontChange: (px) => {
       for (const t of tabs) {
+        if (!isTerm(t)) continue; // editors follow the --term-font size on their own
         t.term.options.fontSize = px;
         if (t.opened) fitAndResize(t);
       }
+    },
+    onEditorChange: (isVim) => {
+      for (const t of tabs) if (!isTerm(t)) t.editor.setVim(isVim);
     },
   });
   // Shortcuts when the keyboard is NOT on the terminal (the terminal has its own handler above).
@@ -560,7 +709,7 @@ async function start() {
 
   drawersApi = initDrawers({
     toast,
-    focusTerminal: () => activeTab()?.term.focus(),
+    focusTerminal: focusActive,
     panesEl,
     dragger,
   });
@@ -570,20 +719,21 @@ async function start() {
   });
   initContextMenu({
     panesEl,
-    getTerm: () => activeTab()?.term,
+    getTerm: () => (isTerm(activeTab()) ? activeTab().term : null),
     send: (data) => {
       const tab = activeTab();
-      if (tab) invoke("pty_write", { id: tab.id, data });
+      if (isTerm(tab)) invoke("pty_write", { id: tab.id, data });
     },
     toast,
   });
   explorerApi = await initExplorer({
     dragger,
-    getActiveTabId: () => activeId,
+    getActiveTabId: () => (isTerm(activeTab()) ? activeId : lastTermId),
     onCd: async (path) => {
-      const tab = activeTab();
+      const tab = terminalForAction();
       if (tab) typeText(`cd ${shellPath(path, homeDir, await cwdOf(tab))}`);
     },
+    onOpenFile: openFile,
     toast,
   });
 
@@ -591,14 +741,14 @@ async function start() {
   // text, which you may want to select and copy).
   panesEl.addEventListener("pointerdown", (e) => {
     if (e.target.closest("#info")) return;
-    setTimeout(() => activeTab()?.term.focus(), 0);
+    setTimeout(focusActive, 0);
   });
 
   panesEl.addEventListener("wheel", scrollFromPanes, { passive: false });
 
   newTabBtn.addEventListener("click", newTab);
   // After clicking a control, hand the keyboard back to the terminal so shortcuts keep working.
-  const focusTerminal = () => activeTab()?.term.focus();
+  const focusTerminal = focusActive;
   document.getElementById("ascii-logo").addEventListener("click", () => { cycleLogo(); focusTerminal(); });
 
   // Welcome screen and logo choices live in the Display panel.
@@ -622,12 +772,12 @@ async function start() {
 
   new ResizeObserver(() => {
     const tab = activeTab();
-    if (tab && tab.opened) fitAndResize(tab);
+    if (isTerm(tab) && tab.opened) fitAndResize(tab);
   }).observe(panesEl);
   // When the header changes size (window resize, layout change), keep everything lined up.
   new ResizeObserver(() => {
     const tab = activeTab();
-    if (!tab) return;
+    if (!isTerm(tab)) return;
     applyScroll(tab);
     keepCursorInView(tab);
   }).observe(heroEl);

@@ -696,3 +696,65 @@ html[data-panels="terminal"] .mini-form, html[data-panels="terminal"] .mini-fiel
 html[data-panels="terminal"] .mini-save { background: #12261a; border-color: #1c3324; color: #7ee787; }
 html[data-panels="terminal"] .add-row:hover { color: #3fb950; border-color: #3fb950; }
 .keys-row .combo .plus { align-self: center; font-size: 10.5px; color: #5b616b; }
+
+/* ====================================================================================
+   Files | Repos switch, project rows, git letters
+   ==================================================================================== */
+.fx-subtabs { padding: 4px 8px 0 8px; }
+.fx-view { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.fx-view[hidden] { display: none; }
+
+.rp-row { padding-top: 5px; padding-bottom: 5px; }
+.rp-row .ico-git { color: #ff7b54; }
+.rp-text { display: flex; flex: 1; flex-direction: column; gap: 1px; min-width: 0; }
+.rp-meta { display: flex; gap: 8px; overflow: hidden; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.rp-branch { overflow: hidden; text-overflow: ellipsis; font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono", monospace; }
+.rp-sync { color: #79b8ff; }
+.rp-changes { color: #e0a63a; }
+.rp-clean { color: #56d364; }
+.rp-empty { margin: 8px 10px; }
+
+.rp-roots { margin: 16px 10px 8px 10px; padding-top: 10px; border-top: 1px solid #1d2128; }
+.rp-roots-head { margin-bottom: 4px; font-size: 11px; letter-spacing: 0.04em; color: var(--muted); }
+.rp-root { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12px; }
+.rp-root-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-root-del { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: none; border-radius: 5px; background: none; color: var(--muted); cursor: pointer; }
+.rp-root-del:hover { background: #232830; color: #ff6369; }
+.rp-root-del .ico { width: 12px; height: 12px; }
+#rp-list .mini-form { margin: 8px 8px 4px 8px; }
+
+.git-badge { flex: none; width: 14px; margin-left: 6px; font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 11px; font-weight: 700; text-align: center; color: #e0a63a; }
+.fx-row[data-git="A"] .git-badge, .fx-row[data-git="U"] .git-badge { color: #56d364; }
+.fx-row[data-git="D"] .git-badge, .fx-row[data-git="!"] .git-badge { color: #ff6369; }
+.fx-row[data-git="R"] .git-badge { color: #79b8ff; }
+.fx-row.git-changed:not(.rp-row) .fx-name { color: #e8c777; }
+.fx-row[data-git="A"] .fx-name, .fx-row[data-git="U"] .fx-name { color: #7ee787; }
+.fx-row[data-git="D"] .fx-name, .fx-row[data-git="!"] .fx-name { color: #ff8a8e; }
+.fx-row[data-git="D"] .fx-name { text-decoration: line-through; }
+html[data-panels="terminal"] .git-badge { font-weight: 400; }
+
+/* ====================================================================================
+   Editor tabs
+   ==================================================================================== */
+.editor-host { position: absolute; inset: 0; }
+.editor-host .cm-editor { height: 100%; }
+.tab > .ico { width: 14px; height: 14px; margin-right: 6px; }
+.tab .tab-dirty { display: none; margin-left: 4px; color: #e0a63a; }
+.tab.dirty .tab-dirty { display: inline-flex; }
+.tab .tab-dirty .ico { width: 12px; height: 12px; }
+
+/* ====================================================================================
+   In-app question box
+   ==================================================================================== */
+.modal-back { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); }
+.modal { width: 380px; max-width: 90vw; padding: 18px 20px; background: #12151a; border: 1px solid #2c313a; border-radius: 10px; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7); }
+.modal h3 { margin: 0 0 6px 0; font-size: 15px; font-weight: 600; }
+.modal p { margin: 0 0 16px 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
+.modal-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.modal-btn { padding: 6px 14px; border: 1px solid #2c313a; border-radius: 6px; background: none; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.modal-btn:hover { background: #1b1f26; }
+.modal-btn.primary { background: #1c2a3f; border-color: #2e4a72; }
+.modal-btn.primary:hover { background: #24375a; }
+.modal-btn.danger { color: #ff6369; border-color: #5b2a2d; }
+html[data-panels="terminal"] .modal, html[data-panels="terminal"] .modal-btn { border-radius: 0; }
+html[data-panels="terminal"] .modal-btn.primary { background: #12261a; border-color: #1c3324; color: #7ee787; }

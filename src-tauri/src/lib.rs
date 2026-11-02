@@ -3,6 +3,7 @@
 // into it, and pass everything the shell prints back to the window.
 
 mod fsinfo;
+mod repo;
 mod sysinfo;
 
 use std::{
@@ -217,6 +218,10 @@ pub fn run() {
             pty_cwd,
             fsinfo::list_dir,
             fsinfo::home_dir,
+            repo::read_text_file,
+            repo::write_text_file,
+            repo::find_repos,
+            repo::git_summary,
             sysinfo::system_info
         ])
         .run(tauri::generate_context!())

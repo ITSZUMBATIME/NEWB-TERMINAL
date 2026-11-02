@@ -12,7 +12,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { el, segmented, makePopover } from "./ui.js";
 
 const KEY = "akin.display.v1";
-const DEFAULTS = { scale: 1, font: 14, panels: "classic" };
+const DEFAULTS = { scale: 1, font: 14, panels: "classic", editor: "friendly" };
 const SCALE_MIN = 0.6;
 const SCALE_MAX = 3;
 const FONT_MIN = 9;
@@ -32,10 +32,10 @@ function load() {
 }
 
 /**
- * options: { onFontChange(px), toast(msg) }
+ * options: { onFontChange(px), onEditorChange(isVim), toast(msg) }
  * returns { state, popover, stepScale(dir), resetScale() }
  */
-export function initDisplay({ onFontChange, toast }) {
+export function initDisplay({ onFontChange, onEditorChange, toast }) {
   const state = load();
   const save = () => {
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (_) { /* fine */ }
@@ -99,6 +99,7 @@ export function initDisplay({ onFontChange, toast }) {
 
   function applyFont() {
     fontVal.textContent = `${state.font} px`;
+    document.documentElement.style.setProperty("--term-font", `${state.font}px`); // the editor uses it too
     onFontChange(state.font);
   }
   function setFont(px) {
@@ -128,6 +129,23 @@ export function initDisplay({ onFontChange, toast }) {
     applyLook();
   }
 
+  /* ---------- Editor ---------- */
+
+  const editorSeg = segmented(
+    document.getElementById("seg-editor"),
+    [
+      { id: "friendly", label: "Friendly" },
+      { id: "vim", label: "Vim" },
+    ],
+    (id) => setEditor(id),
+  );
+  function setEditor(id) {
+    state.editor = id === "vim" ? "vim" : "friendly";
+    save();
+    editorSeg.set(state.editor);
+    onEditorChange?.(state.editor === "vim");
+  }
+
   /* ---------- Buttons ---------- */
 
   document.getElementById("scale-down").addEventListener("click", () => stepScale(-1));
@@ -138,6 +156,7 @@ export function initDisplay({ onFontChange, toast }) {
     setScale(DEFAULTS.scale, { quiet: true });
     setFont(DEFAULTS.font);
     setLook(DEFAULTS.panels);
+    setEditor(DEFAULTS.editor);
     toast("Display reset.");
   });
 
@@ -145,6 +164,8 @@ export function initDisplay({ onFontChange, toast }) {
 
   applyLook();
   applyScale();
+  editorSeg.set(state.editor);
+  document.documentElement.style.setProperty("--term-font", `${state.font}px`);
   fontVal.textContent = `${state.font} px`; // the terminals aren't created yet; main.js reads state.font for each
 
   // First time on a very large screen? Say how to make things bigger.

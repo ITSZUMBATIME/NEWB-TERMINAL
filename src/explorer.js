@@ -7,6 +7,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { el } from "./ui.js";
 import { fileIcon } from "./icons.js";
+import { initRepos } from "./repos.js";
 
 const KEY = "akin.explorer.v1";
 const MIN_W = 190;
@@ -14,9 +15,9 @@ const MAX_W = 560;
 
 function loadState() {
   try {
-    return { open: true, w: 290, hidden: false, follow: true, ...JSON.parse(localStorage.getItem(KEY)) };
+    return { open: true, w: 290, hidden: false, follow: true, view: "files", ...JSON.parse(localStorage.getItem(KEY)) };
   } catch (_) {
-    return { open: true, w: 290, hidden: false, follow: true };
+    return { open: true, w: 290, hidden: false, follow: true, view: "files" };
   }
 }
 
@@ -24,10 +25,10 @@ const join = (dir, name) => (dir === "/" ? `/${name}` : `${dir}/${name}`);
 const parentOf = (p) => (p === "/" ? "/" : p.slice(0, p.lastIndexOf("/")) || "/");
 
 /**
- * options: { dragger, getActiveTabId(), onCd(path), toast(msg) }
- * returns { toggle, open, close, isOpen, refresh }
+ * options: { dragger, getActiveTabId(), onCd(path), onOpenFile(path), toast(msg) }
+ * returns { toggle, open, close, isOpen, refresh, sync, noteSaved(path) }
  */
-export async function initExplorer({ dragger, getActiveTabId, onCd, toast }) {
+export async function initExplorer({ dragger, getActiveTabId, onCd, onOpenFile, toast }) {
   const root_ = document.getElementById("explorer");
   const workspace = document.getElementById("workspace");
   const tree = document.getElementById("fx-tree");
@@ -63,6 +64,7 @@ export async function initExplorer({ dragger, getActiveTabId, onCd, toast }) {
     save();
     applyOpen();
     sync();
+    if (state.view === "repos") repos?.show();
   }
   function close() {
     state.open = false;
@@ -110,7 +112,8 @@ export async function initExplorer({ dragger, getActiveTabId, onCd, toast }) {
     return invoke("list_dir", { path, showHidden: state.hidden });
   }
 
-  function rowFor(entry, dir, depth) {
+  // `ctx` is only used by the Repos tab (its own open folders, and git letters on the rows).
+  function rowFor(entry, dir, depth, ctx) {
     const path = join(dir, entry.name);
     const wrap = el("div", "fx-node");
     const row = el("div", "fx-row");
@@ -134,25 +137,28 @@ export async function initExplorer({ dragger, getActiveTabId, onCd, toast }) {
     }
     wrap.append(row);
 
+    const opened = ctx?.expanded || expanded;
     if (entry.is_dir) {
       const kids = el("div", "fx-kids");
       wrap.append(kids);
       row.addEventListener("click", () => {
         if (dragger.justDragged) return;
         select(row);
-        toggleFolder(row, kids, path, depth);
+        toggleFolder(row, kids, path, depth, ctx);
       });
       row.addEventListener("dblclick", () => typeCd(path));
-      if (expanded.has(path)) {
+      if (opened.has(path)) {
         row.classList.add("open");
-        fill(kids, path, depth + 1);
+        fill(kids, path, depth + 1, ctx);
       }
     } else {
       row.addEventListener("click", () => {
         if (dragger.justDragged) return;
         select(row);
+        onOpenFile(path);
       });
     }
+    ctx?.decorate(row, path, entry.is_dir);
     return wrap;
   }
 
@@ -162,7 +168,7 @@ export async function initExplorer({ dragger, getActiveTabId, onCd, toast }) {
     row.classList.add("sel");
   }
 
-  async function fill(container, dir, depth) {
+  async function fill(container, dir, depth, ctx) {
     container.replaceChildren(el("div", "fx-note", "Loading…"));
     try {
       const { entries, truncated } = await listDir(dir);
@@ -172,7 +178,7 @@ export async function initExplorer({ dragger, getActiveTabId, onCd, toast }) {
         n.style.setProperty("--d", depth);
         container.append(n);
       }
-      for (const entry of entries) container.append(rowFor(entry, dir, depth));
+      for (const entry of entries) container.append(rowFor(entry, dir, depth, ctx));
       if (truncated) {
         const n = el("div", "fx-note", "Too many items to show them all.");
         n.style.setProperty("--d", depth);
@@ -185,15 +191,16 @@ export async function initExplorer({ dragger, getActiveTabId, onCd, toast }) {
     }
   }
 
-  function toggleFolder(row, kids, path, depth) {
-    if (expanded.has(path)) {
-      expanded.delete(path);
+  function toggleFolder(row, kids, path, depth, ctx) {
+    const opened = ctx?.expanded || expanded;
+    if (opened.has(path)) {
+      opened.delete(path);
       row.classList.remove("open");
       kids.replaceChildren();
     } else {
-      expanded.add(path);
+      opened.add(path);
       row.classList.add("open");
-      fill(kids, path, depth + 1);
+      fill(kids, path, depth + 1, ctx);
     }
   }
 
@@ -262,10 +269,38 @@ export async function initExplorer({ dragger, getActiveTabId, onCd, toast }) {
   }
   setInterval(sync, 1200);
 
+  /* ---------- Files | Repos ---------- */
+
+  const repoList = byId("rp-list");
+  const repos = initRepos({
+    list: repoList,
+    addBtn: byId("rp-add"),
+    refreshBtn: byId("rp-refresh"),
+    fillTree: fill,
+    dragger,
+    home,
+    toast,
+    getFilesFolder: () => root,
+    isVisible: () => state.open && state.view === "repos",
+    onCd: typeCd,
+  });
+  const viewEls = { files: byId("fx-view-files"), repos: byId("fx-view-repos") };
+  const viewTabs = [...root_.querySelectorAll("[data-fxview]")];
+  function showView(name) {
+    state.view = name === "repos" ? "repos" : "files";
+    save();
+    for (const [k, v] of Object.entries(viewEls)) v.hidden = k !== state.view;
+    for (const b of viewTabs) b.classList.toggle("on", b.dataset.fxview === state.view);
+    if (state.view === "repos") repos.show();
+  }
+  for (const b of viewTabs) b.addEventListener("click", () => showView(b.dataset.fxview));
+
   dragger.attach(tree);
+  dragger.attach(repoList);
   applyOpen();
   await render();
+  showView(state.view);
   sync();
 
-  return { toggle, open, close, isOpen, refresh: render, sync };
+  return { toggle, open, close, isOpen, refresh: render, sync, noteSaved: repos.noteSaved };
 }

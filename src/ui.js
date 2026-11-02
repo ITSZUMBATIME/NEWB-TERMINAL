@@ -105,3 +105,99 @@ export function makePopover(pop, button, { onOpen } = {}) {
   popovers.push(api);
   return api;
 }
+
+/**
+ * A small question box that sits on top of the window (the browser's own confirm() is not
+ * reliable inside the app). `choices` is [{ id, label, primary?, danger?, cancel? }].
+ * Resolves with the id of the button pressed. Esc or clicking outside picks the `cancel` one.
+ */
+export function askChoice({ title, message, choices }) {
+  return new Promise((resolve) => {
+    const back = el("div", "modal-back");
+    const box = el("div", "modal");
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-label", title);
+    const row = el("div", "modal-buttons");
+    const cancelId = choices.find((c) => c.cancel)?.id ?? null;
+
+    const done = (id) => {
+      window.removeEventListener("keydown", onKey, true);
+      back.remove();
+      resolve(id);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        done(cancelId);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    back.addEventListener("pointerdown", (e) => {
+      if (e.target === back) done(cancelId);
+    });
+
+    for (const c of choices) {
+      const b = el("button", `modal-btn${c.primary ? " primary" : ""}${c.danger ? " danger" : ""}`, c.label);
+      b.type = "button";
+      b.addEventListener("click", () => done(c.id));
+      row.append(b);
+    }
+    box.append(el("h3", "", title), el("p", "", message), row);
+    back.append(box);
+    document.body.append(back);
+    (row.querySelector(".primary") || row.firstChild)?.focus();
+  });
+}
+
+/** A small form for a name or a command. Returns the form element. */
+export function miniForm({ fields, submitLabel, onSave, onCancel, hint }) {
+  const form = el("form", "mini-form");
+  const inputs = fields.map((f) => {
+    const label = el("label", "mini-field");
+    label.append(el("span", "", f.label));
+    const input = el("input");
+    input.type = "text";
+    input.placeholder = f.placeholder || "";
+    input.value = f.value || "";
+    input.spellcheck = false;
+    input.autocomplete = "off";
+    label.append(input);
+    form.append(label);
+    return { f, input };
+  });
+  if (hint) form.append(el("div", "mini-hint", hint));
+  const error = el("div", "mini-error");
+  error.hidden = true;
+  const row = el("div", "mini-buttons");
+  const ok = el("button", "mini-save", submitLabel);
+  ok.type = "submit";
+  const cancel = el("button", "mini-cancel", "Cancel");
+  cancel.type = "button";
+  cancel.addEventListener("click", onCancel);
+  row.append(ok, cancel);
+  form.append(error, row);
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const values = {};
+    for (const { f, input } of inputs) values[f.key] = input.value.trim();
+    const missing = inputs.find(({ f, input }) => f.required && !input.value.trim());
+    if (missing) {
+      error.textContent = `Please fill in: ${missing.f.label}`;
+      error.hidden = false;
+      missing.input.focus();
+      return;
+    }
+    onSave(values);
+  });
+  form.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      onCancel();
+    }
+  });
+  // the drag engine and panel shortcuts shouldn't hijack typing in here
+  form.addEventListener("pointerdown", (e) => e.stopPropagation());
+  form.focusFirst = () => inputs[0].input.focus();
+  return form;
+}

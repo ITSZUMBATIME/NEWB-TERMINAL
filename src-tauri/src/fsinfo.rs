@@ -1,4 +1,4 @@
-// Folder browsing for the file explorer panel. Read-only: NEWB only looks, it never changes files here.
+// Folder browsing for the file explorer panel. Read-only: this file only looks. Saving files lives in repo.rs.
 
 use std::{cmp::Ordering, fs, path::Path};
 
