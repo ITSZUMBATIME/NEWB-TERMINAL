@@ -10,6 +10,7 @@
 import { cmdElement, el } from "./ui.js";
 import { fileIcon } from "./icons.js";
 
+const SHOW_CHIP = false; // the little box that follows the mouse while dragging. true brings it back.
 const START_DISTANCE = 4; // pixels you must move before a press counts as a drag
 
 /**
@@ -86,6 +87,7 @@ export function createDragger({ panesEl, onDrop, onStart, onEnd, onLeaveSource }
     window.removeEventListener("pointerup", onUp);
     window.removeEventListener("keydown", onKey, true);
     if (drag?.ghost) drag.ghost.remove();
+    drag?.src?.classList.remove("drag-source");
     const wasActive = drag?.active;
     document.body.classList.remove("dragging");
     setHighlight(null);
@@ -118,7 +120,7 @@ export function createDragger({ panesEl, onDrop, onStart, onEnd, onLeaveSource }
   function tick() {
     frame = 0;
     if (!drag?.active) return;
-    drag.ghost.style.transform = `translate3d(${drag.x + 14}px, ${drag.y + 10}px, 0)`;
+    if (drag.ghost) drag.ghost.style.transform = `translate3d(${drag.x + 14}px, ${drag.y + 10}px, 0)`;
     setHighlight(targetAt(drag.x, drag.y, drag.payload));
   }
 
@@ -131,7 +133,8 @@ export function createDragger({ panesEl, onDrop, onStart, onEnd, onLeaveSource }
       if (Math.hypot(drag.x - drag.x0, drag.y - drag.y0) < START_DISTANCE) return;
       drag.active = true;
       measure();
-      drag.ghost = makeGhost(drag.payload);
+      drag.ghost = SHOW_CHIP ? makeGhost(drag.payload) : null;
+      drag.src.classList.add("drag-source"); // the row you picked up fades a little instead
       document.body.classList.add("dragging");
       onStart?.(drag.payload);
     }
@@ -166,6 +169,7 @@ export function createDragger({ panesEl, onDrop, onStart, onEnd, onLeaveSource }
     if (!src) return;
     drag = {
       payload: payloadOf(src),
+      src,
       from: src.closest(".drawer"),
       x0: e.clientX,
       y0: e.clientY,
