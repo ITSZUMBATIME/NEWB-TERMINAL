@@ -1,15 +1,16 @@
-// Display settings: how big everything is, and how NEWB looks.
+// Display settings: how big everything is, and how NEWB looks. The Settings tab is where
+// people change them; this file keeps the values, applies them and remembers them.
 //
 //   Size            scales the whole window: buttons, icons, panels, the logo and text.
 //                   Works like zoom in a web browser (Ctrl +, Ctrl -, Ctrl 0, or Ctrl + mouse wheel).
 //   Terminal text   the size of the letters in the terminal itself.
 //   Look            Classic, Flat or Terminal panels and icons.
+//   Editor keys     Friendly or Vim.
 //
-// The welcome screen and logo choices are filled in by main.js (it owns that state).
-// Everything is remembered between runs. No sliders: a few clear buttons.
+// The welcome screen and logo choices are kept by main.js (it owns that state).
+// Everything is remembered between runs.
 
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { el, segmented, makePopover } from "./ui.js";
 
 const KEY = "akin.display.v1";
 const DEFAULTS = { scale: 1, font: 14, panels: "classic", editor: "friendly" };
@@ -17,9 +18,8 @@ const SCALE_MIN = 0.6;
 const SCALE_MAX = 3;
 const FONT_MIN = 9;
 const FONT_MAX = 32;
-// The sizes Ctrl + and Ctrl - step through, and the quick buttons.
+// The sizes Ctrl + and Ctrl - step through.
 const STEPS = [0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
-const CHIPS = [0.75, 1, 1.25, 1.5, 2, 3];
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
@@ -33,7 +33,7 @@ function load() {
 
 /**
  * options: { onFontChange(px), onEditorChange(isVim), toast(msg) }
- * returns { state, popover, stepScale(dir), resetScale(), setScale, setFont, setLook, setEditor, subscribe }
+ * returns { state, stepScale(dir), resetScale(), setScale, setFont, setLook, setEditor, subscribe }
  */
 export function initDisplay({ onFontChange, onEditorChange, toast }) {
   const state = load();
@@ -44,22 +44,7 @@ export function initDisplay({ onFontChange, onEditorChange, toast }) {
   const listeners = new Set();
   const emit = () => listeners.forEach((fn) => fn(state));
 
-  const pop = document.getElementById("display-pop");
-  const scaleVal = document.getElementById("scale-val");
-  const fontVal = document.getElementById("font-val");
-  const chipBox = document.getElementById("scale-chips");
-  const popover = makePopover(pop, document.getElementById("open-display"));
-
   /* ---------- Size ---------- */
-
-  const chips = CHIPS.map((s) => {
-    const b = el("button", "chip", `${Math.round(s * 100)}`);
-    b.type = "button";
-    b.title = `${Math.round(s * 100)}%`;
-    b.addEventListener("click", () => setScale(s));
-    chipBox.append(b);
-    return { s, b };
-  });
 
   let usingCssZoom = false;
   let zoomToken = 0;
@@ -67,8 +52,6 @@ export function initDisplay({ onFontChange, onEditorChange, toast }) {
   async function applyScale() {
     const token = ++zoomToken;
     const factor = state.scale;
-    scaleVal.textContent = `${Math.round(factor * 100)}%`;
-    for (const { s, b } of chips) b.classList.toggle("on", Math.abs(s - factor) < 0.001);
     try {
       // The browser engine's own zoom: sharp at every size, and the window layout follows it.
       await getCurrentWebview().setZoom(factor);
@@ -102,7 +85,6 @@ export function initDisplay({ onFontChange, onEditorChange, toast }) {
   /* ---------- Terminal text ---------- */
 
   function applyFont() {
-    fontVal.textContent = `${state.font} px`;
     document.documentElement.style.setProperty("--term-font", `${state.font}px`); // the editor uses it too
     onFontChange(state.font);
   }
@@ -115,18 +97,8 @@ export function initDisplay({ onFontChange, onEditorChange, toast }) {
 
   /* ---------- Look ---------- */
 
-  const lookSeg = segmented(
-    document.getElementById("panel-style"),
-    [
-      { id: "classic", label: "Classic" },
-      { id: "flat", label: "Flat" },
-      { id: "terminal", label: "Terminal" },
-    ],
-    (id) => setLook(id),
-  );
   function applyLook() {
     document.documentElement.dataset.panels = state.panels;
-    lookSeg.set(state.panels);
   }
   function setLook(name) {
     state.panels = name;
@@ -137,56 +109,30 @@ export function initDisplay({ onFontChange, onEditorChange, toast }) {
 
   /* ---------- Editor ---------- */
 
-  const editorSeg = segmented(
-    document.getElementById("seg-editor"),
-    [
-      { id: "friendly", label: "Friendly" },
-      { id: "vim", label: "Vim" },
-    ],
-    (id) => setEditor(id),
-  );
   function setEditor(id) {
     state.editor = id === "vim" ? "vim" : "friendly";
     save();
-    editorSeg.set(state.editor);
     onEditorChange?.(state.editor === "vim");
     emit();
   }
-
-  /* ---------- Buttons ---------- */
-
-  document.getElementById("scale-down").addEventListener("click", () => stepScale(-1));
-  document.getElementById("scale-up").addEventListener("click", () => stepScale(1));
-  document.getElementById("font-down").addEventListener("click", () => setFont(state.font - 1));
-  document.getElementById("font-up").addEventListener("click", () => setFont(state.font + 1));
-  document.getElementById("display-reset").addEventListener("click", () => {
-    setScale(DEFAULTS.scale, { quiet: true });
-    setFont(DEFAULTS.font);
-    setLook(DEFAULTS.panels);
-    setEditor(DEFAULTS.editor);
-    toast("Display reset.");
-  });
 
   /* ---------- Go ---------- */
 
   applyLook();
   applyScale();
-  editorSeg.set(state.editor);
   document.documentElement.style.setProperty("--term-font", `${state.font}px`);
-  fontVal.textContent = `${state.font} px`; // the terminals aren't created yet; main.js reads state.font for each
 
   // First time on a very large screen? Say how to make things bigger.
   try {
     const bigScreen = window.screen.width >= 3440 || window.screen.height >= 1600;
     if (bigScreen && state.scale === 1 && !localStorage.getItem("akin.sizehint")) {
       localStorage.setItem("akin.sizehint", "1");
-      setTimeout(() => toast("Big screen? Press Ctrl and + to make everything bigger, or use the Display button."), 2500);
+      setTimeout(() => toast("Big screen? Press Ctrl and + to make everything bigger, or open Settings with the cog at the top right."), 2500);
     }
   } catch (_) { /* fine */ }
 
   return {
     state,
-    popover,
     stepScale,
     resetScale,
     setScale,

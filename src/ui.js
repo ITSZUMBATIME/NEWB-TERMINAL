@@ -53,61 +53,6 @@ export function shellPath(path, home, cwd) {
 }
 
 /**
- * A row of buttons where one is chosen (like Classic / Flat / Terminal).
- * `items` is [{ id, label }]. Returns { set(id) } to change which is highlighted.
- */
-export function segmented(container, items, onPick) {
-  container.replaceChildren();
-  const buttons = new Map();
-  for (const item of items) {
-    const b = el("button", "", item.label);
-    b.type = "button";
-    b.dataset.id = item.id;
-    b.addEventListener("click", () => onPick(item.id));
-    container.append(b);
-    buttons.set(item.id, b);
-  }
-  return {
-    set(id) {
-      for (const [k, b] of buttons) b.classList.toggle("on", k === id);
-    },
-  };
-}
-
-// Only one popover is open at a time.
-const popovers = [];
-
-/** Open and close a popover from its button; clicking elsewhere or pressing Esc closes it. */
-export function makePopover(pop, button, { onOpen } = {}) {
-  const api = {
-    isOpen: () => !pop.hidden,
-    open() {
-      for (const p of popovers) if (p !== api) p.close();
-      pop.hidden = false;
-      button.classList.add("active");
-      onOpen?.();
-    },
-    close() {
-      pop.hidden = true;
-      button.classList.remove("active");
-    },
-    toggle() {
-      if (api.isOpen()) api.close();
-      else api.open();
-    },
-  };
-  button.addEventListener("click", () => api.toggle());
-  window.addEventListener("pointerdown", (e) => {
-    if (api.isOpen() && !pop.contains(e.target) && !button.contains(e.target)) api.close();
-  });
-  window.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && api.isOpen()) api.close();
-  });
-  popovers.push(api);
-  return api;
-}
-
-/**
  * A small question box that sits on top of the window (the browser's own confirm() is not
  * reliable inside the app). `choices` is [{ id, label, primary?, danger?, cancel? }].
  * Resolves with the id of the button pressed. Esc or clicking outside picks the `cancel` one.

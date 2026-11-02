@@ -14,11 +14,10 @@ import { printBanner } from "./banner.js";
 import { initDrawers } from "./drawers.js";
 import { initExplorer } from "./explorer.js";
 import { initDisplay } from "./display.js";
-import { initAbout } from "./about.js";
 import { handleClipboardKey, initContextMenu } from "./clipboard.js";
 import { icon, mountIcons, fileIcon } from "./icons.js";
 import { createDragger } from "./drag.js";
-import { shellPath, segmented, askChoice, el } from "./ui.js";
+import { shellPath, askChoice, el } from "./ui.js";
 import { createEditor } from "./editor.js";
 import { parseSpec, startTemplate, handleTemplateKey, cancelTemplate, fillBlank, refresh as refreshTemplate } from "./template.js";
 import { AsciiLogo, ASCII_STYLES, setLogoColors } from "./asciilogo.js";
@@ -26,6 +25,7 @@ import { initThemes, onThemeChange, hexToRgb } from "./themes.js";
 import { prefs } from "./prefs.js";
 import pkg from "../package.json";
 import { createSettingsView } from "./settings.js";
+import { initCustomThemes } from "./customthemes.js";
 
 initThemes(); // colours first, so nothing flashes the wrong theme
 
@@ -70,14 +70,12 @@ const LOGOS = [
   { id: "shade", name: "ASCII Shade" },
 ].filter((l) => ASCII_STYLES.includes(l.id));
 let logoIndex = 0;
-let logoSeg = null;
 
 function setLogo(i, announce) {
   logoIndex = (i + LOGOS.length) % LOGOS.length;
   const logo = LOGOS[logoIndex];
   heroEl.dataset.logo = logo.id;
   asciiLogo.setStyle(logo.id);
-  logoSeg?.set(logo.id);
   saveSetting("akin.logo.v2", logo.id);
   welcomeListeners.forEach((fn) => fn());
   if (announce) toast(`Logo: ${logo.name}.`, 2000);
@@ -115,7 +113,6 @@ const LAYOUTS = [
   { id: "off", name: "Off", hint: "nothing extra, a plain terminal." },
 ];
 let layoutIndex = 0;
-let layoutSeg = null;
 let bannerShown = false;
 let infoModel = null;
 let infoPromise = null;
@@ -131,7 +128,6 @@ function setLayout(i, announce) {
   layoutIndex = (i + LAYOUTS.length) % LAYOUTS.length;
   const layout = LAYOUTS[layoutIndex];
   heroEl.dataset.layout = layout.id;
-  layoutSeg?.set(layout.id);
   saveSetting("akin.layout.v4", layout.id);
   welcomeListeners.forEach((fn) => fn());
   if (announce) toast(`Welcome screen: ${layout.name}, ${layout.hint}`, 4500);
@@ -150,8 +146,8 @@ async function loadInfo() {
 /* ---------- Dropping commands into the terminal ---------- */
 
 let drawersApi = null;
-let aboutApi = null;
 let display = null;
+let customThemes = null;
 let explorerApi = null;
 let homeDir = "";
 
@@ -302,6 +298,9 @@ function scrollFromPanes(e) {
   if (e.target.closest(".xterm")) return;
   const tab = shownTerm();
   if (!tab || !tab.opened) return;
+  // With the editor (or Settings) beside the terminal, scrolling over that side is its own business.
+  const over = e.target.closest?.(".pane");
+  if (over && over !== tab.pane) return;
   if (handleWheel(tab, e) === false) return; // the header moved (or it was a zoom)
   const { dy, cellH } = wheelPixels(tab, e);
   if (!dy) return;
@@ -372,7 +371,7 @@ function layoutPanes() {
   const termVisible = term && (split || active === term);
   if (termVisible) {
     heroEl.style.display = ""; // the welcome header belongs to the terminal
-    term.pane.prepend(heroEl);
+    if (term.pane.firstElementChild !== heroEl) term.pane.prepend(heroEl);
     applyScroll(term);
     requestAnimationFrame(() => term.opened && fitAndResize(term)); // its width may have changed
   } else {
@@ -587,6 +586,7 @@ async function saveEditor(tab) {
     tab.editor.markSaved();
     toast(`Saved ${tab.name}`, 1500);
     explorerApi?.noteSaved(tab.path);
+    if (tab.path.includes("/newb/themes/")) customThemes?.rescan(true); // recolour straight away
     return true;
   } catch (err) {
     toast(`Couldn't save ${tab.name}: ${err}`, 6000);
@@ -682,7 +682,7 @@ function openSettings(sectionId) {
   closeEl.className = "close";
   closeEl.append(icon("close"));
   closeEl.title = "Close tab (Ctrl+Shift+W)";
-  tabEl.append(icon("display"), labelEl, closeEl);
+  tabEl.append(icon("settings"), labelEl, closeEl);
   tabsEl.appendChild(tabEl);
 
   const view = createSettingsView({
@@ -692,6 +692,13 @@ function openSettings(sectionId) {
     welcome: welcomeApi,
     projects: explorerApi?.repos,
     version: pkg.version,
+    openCheats: () => drawersApi?.open("tree"),
+    openKeys: () => drawersApi?.open("keys"),
+    themes: customThemes,
+    showThemesFolder: () => {
+      const folder = customThemes?.dir();
+      if (folder) typeText(`cd ${shellPath(folder, homeDir)}`);
+    },
   });
   const tab = {
     id, kind: "settings", path: null, name: "Settings", pane, holder, s: 0, tabEl, labelEl, opened: true, dirty: false, view,
@@ -808,6 +815,15 @@ async function start() {
       for (const t of tabs) if (!isTerm(t)) t.editor.setVim(isVim);
     },
   });
+  // Your own themes: a folder that is watched, so changes show up while NEWB is running.
+  customThemes = initCustomThemes({
+    toast,
+    openForEdit: async (path) => {
+      await openFile(path);
+      if (!splitOn) toggleSplit(); // terminal beside the file, so you see the colours change as you save
+    },
+  });
+  customThemes.start();
   // Everything that is drawn in JavaScript follows the theme.
   onThemeChange((theme) => {
     setLogoColors({ code: hexToRgb(theme.green), shade: hexToRgb(theme.ink), dots: hexToRgb(theme.accent) });
@@ -830,7 +846,6 @@ async function start() {
     }
   });
   document.getElementById("open-settings").addEventListener("click", () => {
-    display.popover.close();
     openSettings();
   });
 
@@ -902,10 +917,6 @@ async function start() {
     panesEl,
     dragger,
   });
-  aboutApi = initAbout({
-    openCheats: () => drawersApi.open("tree"),
-    openKeys: () => drawersApi.open("keys"),
-  });
   initContextMenu({
     panesEl,
     getTerm: () => (isTerm(activeTab()) ? activeTab().term : null),
@@ -973,18 +984,6 @@ async function start() {
   // After clicking a control, hand the keyboard back to the terminal so shortcuts keep working.
   const focusTerminal = focusActive;
   document.getElementById("ascii-logo").addEventListener("click", () => { cycleLogo(); focusTerminal(); });
-
-  // Welcome screen and logo choices live in the Display panel.
-  layoutSeg = segmented(
-    document.getElementById("seg-layout"),
-    LAYOUTS.map((l) => ({ id: l.id, label: l.name })),
-    (id) => setLayout(LAYOUTS.findIndex((l) => l.id === id), true),
-  );
-  logoSeg = segmented(
-    document.getElementById("seg-logo"),
-    LOGOS.map((l) => ({ id: l.id, label: l.name })),
-    (id) => setLogo(LOGOS.findIndex((l) => l.id === id), false),
-  );
 
   mountIcons(); // fill in the little pictures on the buttons
 

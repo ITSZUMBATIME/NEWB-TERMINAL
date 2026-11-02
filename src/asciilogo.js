@@ -116,6 +116,7 @@ export class AsciiLogo {
     this.ctx = canvas.getContext("2d");
     this.style = null;
     this.timer = null;
+    this.layoutToken = 0;
     this.reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     new ResizeObserver(() => this.layout()).observe(canvas);
   }
@@ -146,12 +147,11 @@ export class AsciiLogo {
     const cfg = STYLES[style];
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width < 10) return;
+    const token = ++this.layoutToken;
 
     const dpr = window.devicePixelRatio || 1;
-    this.canvas.width = Math.round(rect.width * dpr);
-    this.canvas.height = Math.round(rect.height * dpr);
-    this.cssW = rect.width;
-    this.cssH = rect.height;
+    const width = Math.round(rect.width * dpr);
+    const height = Math.round(rect.height * dpr);
 
     // Characters smaller than about 6.5 real pixels turn to mush, so when the interface is zoomed
     // out, use fewer, larger characters.
@@ -159,28 +159,36 @@ export class AsciiLogo {
     const cols = clamp(Math.round(rect.width / cell), 30, 140);
     const grid = await sampleLogo(cols, cfg.cellAspect, style !== "dots");
     const img = await loadImage();
-    if (this.style !== style) return;
-
-    const changed = !this.cov || this.cols !== grid.cols || this.rows !== grid.rows || this.drawnStyle !== style;
-    this.cols = grid.cols;
-    this.rows = grid.rows;
-    this.cov = grid.cov;
-    this.rand = grid.rand;
-    this.drawnStyle = style;
+    // A newer layout started while we waited (or the style changed): let that one finish.
+    if (this.style !== style || token !== this.layoutToken) return;
 
     // A faint, solid copy of the logo drawn behind the characters keeps the shape readable.
     const [gr, gg, gb] = cfg.color;
     const ghost = document.createElement("canvas");
-    ghost.width = this.canvas.width;
-    ghost.height = this.canvas.height;
+    ghost.width = width;
+    ghost.height = height;
     const gctx = ghost.getContext("2d");
     gctx.drawImage(img, 0, 0, ghost.width, ghost.height);
     gctx.globalCompositeOperation = "source-in";
     gctx.fillStyle = `rgb(${gr},${gg},${gb})`;
     gctx.fillRect(0, 0, ghost.width, ghost.height);
-    this.ghost = style === "dots" ? null : ghost;
 
-    if (changed) this.startedAt = performance.now(); // only shuffle in when something really changed
+    // Only the first picture of a style shuffles in. Resizing or recolouring just redraws it.
+    const fresh = !this.cov || this.drawnStyle !== style;
+
+    // Swap everything in one go. Resizing a canvas wipes it, so we do that last and draw
+    // straight away: the logo never goes blank (that was the flash when the window changed shape).
+    this.canvas.width = width;
+    this.canvas.height = height;
+    this.cssW = rect.width;
+    this.cssH = rect.height;
+    this.cols = grid.cols;
+    this.rows = grid.rows;
+    this.cov = grid.cov;
+    this.rand = grid.rand;
+    this.drawnStyle = style;
+    this.ghost = style === "dots" ? null : ghost;
+    if (fresh) this.startedAt = performance.now();
     this.frame();
   }
 

@@ -5,6 +5,7 @@
 mod fsinfo;
 mod repo;
 mod sysinfo;
+mod themes;
 
 use std::{
     collections::HashMap,
@@ -229,6 +230,8 @@ pub fn run() {
             repo::git_commit,
             repo::git_sync,
             repo::search_project,
+            themes::scan_themes,
+            themes::install_theme,
             sysinfo::system_info
         ])
         .run(tauri::generate_context!())

@@ -4,7 +4,7 @@
 import { el, askChoice } from "./ui.js";
 import { prefs } from "./prefs.js";
 import { icon } from "./icons.js";
-import { THEMES, currentTheme, onThemeChange, setTheme, setSync, themeState } from "./themes.js";
+import { THEMES, currentTheme, customThemes, onThemeChange, onThemesListChange, setTheme, setSync, themeState } from "./themes.js";
 
 // A row of buttons where one is chosen.
 function choice(items, value, onPick) {
@@ -35,10 +35,10 @@ function toggle(on, onChange) {
 }
 
 /**
- * options: { host, display, toast, welcome, projects, version }
+ * options: { host, display, toast, welcome, projects, version, openCheats(), openKeys(), themes, showThemesFolder() }
  * returns { show(sectionId), focus(), destroy() }
  */
-export function createSettingsView({ host, display, toast, welcome, projects, version }) {
+export function createSettingsView({ host, display, toast, welcome, projects, version, openCheats, openKeys, themes, showThemesFolder }) {
   const rows = []; // { section, el, text } for searching
   const sections = []; // { id, title, el, navEl }
 
@@ -153,6 +153,78 @@ export function createSettingsView({ host, display, toast, welcome, projects, ve
   galleryRow.append(el("div", "st-label", "Theme"), el("div", "st-hint", "One click recolours everything: the terminal, the editor, the panels and the header."), gallery);
   look.append(galleryRow);
   rows.push({ section: look, el: galleryRow, text: "theme colour colours dark light nord dracula gruvbox solarized catppuccin tokyo monokai github one pine" });
+
+  /* ---------- Your own themes ---------- */
+
+  const mine = el("div", "st-block");
+  const mineHint = el("div", "st-hint");
+  const mineActions = el("div", "st-actions");
+  const newBtn = el("button", "st-btn", "New theme from this one");
+  const folderBtn = el("button", "st-btn", "Show the folder");
+  for (const b of [newBtn, folderBtn]) b.type = "button";
+  newBtn.addEventListener("click", () => themes?.createFromCurrent());
+  folderBtn.addEventListener("click", () => showThemesFolder?.());
+  mineActions.append(newBtn, folderBtn);
+  const mineGrid = el("div", "theme-grid");
+  const mineEmpty = el("div", "st-hint", "No themes of your own yet.");
+  const gitForm = el("form", "st-add");
+  const gitInput = el("input", "st-input");
+  gitInput.type = "text";
+  gitInput.placeholder = "Add from Git: https://github.com/…";
+  gitInput.spellcheck = false;
+  const gitBtn = el("button", "st-btn", "Add");
+  gitBtn.type = "submit";
+  gitForm.append(gitInput, gitBtn);
+  gitForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const url = gitInput.value.trim();
+    if (!url || !themes) return;
+    gitBtn.disabled = true;
+    const problem = await themes.install(url);
+    gitBtn.disabled = false;
+    if (problem) toast(problem, 5000);
+    else gitInput.value = "";
+  });
+  mine.append(el("div", "st-label", "Your own themes"), mineHint, mineActions, mineGrid, mineEmpty, gitForm);
+  mine.hidden = !themes;
+  look.append(mine);
+  if (themes) rows.push({ section: look, el: mine, text: "your own custom themes make new edit colours colors.toml omarchy git github download add import folder" });
+
+  let mineIds = [];
+  function renderMine() {
+    mineHint.textContent = `They live in ${themes ? themes.prettyDir() : "~/.config/newb/themes"}. Change a colour in a theme's colors.toml and press Ctrl+S: NEWB recolours as you save. Omarchy themes work too.`;
+    for (const id of mineIds) cards.delete(id);
+    mineIds = [];
+    mineGrid.replaceChildren();
+    const list = customThemes();
+    for (const th of list) {
+      const wrap = el("div", "theme-wrap");
+      const card = themeCard(th);
+      mineIds.push(th.id);
+      const acts = el("div", "theme-acts");
+      const edit = el("button");
+      edit.type = "button";
+      edit.title = "Edit its colours";
+      edit.append(icon("edit"));
+      edit.addEventListener("click", (e) => { e.stopPropagation(); themes?.edit(th); });
+      const del = el("button");
+      del.type = "button";
+      del.title = "Move to the trash";
+      del.append(icon("trash"));
+      del.addEventListener("click", (e) => { e.stopPropagation(); themes?.remove(th); });
+      acts.append(edit, del);
+      wrap.append(card, acts);
+      mineGrid.append(wrap);
+    }
+    mineEmpty.hidden = list.length > 0;
+    markCards();
+  }
+  function markCards() {
+    const th = currentTheme();
+    for (const [id, b] of cards) b.classList.toggle("on", id === th.id);
+  }
+  const unsubscribeThemes = onThemesListChange(renderMine);
+  renderMine();
 
   const sync = toggle(themeState().sync, (v) => {
     setSync(v);
@@ -281,7 +353,45 @@ export function createSettingsView({ host, display, toast, welcome, projects, ve
   /* ---------- About ---------- */
 
   const about = section("about", "About");
-  row(about, `NEWB ${version ? `v${version}` : ""}`, "A terminal for people who are new to the terminal. Open source (MIT): github.com/ITSZUMBATIME/NEWB-TERMINAL", el("span"), "about version help");
+  row(about, `NEWB ${version ? `v${version}` : ""}`, "A terminal for people who are new to the terminal. Open source (MIT): github.com/ITSZUMBATIME/NEWB-TERMINAL", el("span"), "about version help licence");
+
+  // Getting started: the same few tips that used to live behind the (i) button.
+  const tips = el("div", "st-block");
+  tips.append(el("div", "st-label", "Getting started"));
+  const tipList = el("div", "tips");
+  const tip = (bold, rest) => {
+    const p = el("p");
+    p.append(el("b", "", bold), document.createTextNode(` ${rest}`));
+    return p;
+  };
+  const withKeys = (bold, parts) => {
+    const p = el("p");
+    p.append(el("b", "", bold));
+    for (const part of parts) {
+      if (typeof part === "string") p.append(document.createTextNode(part));
+      else p.append(el("kbd", "", part.key));
+    }
+    return p;
+  };
+  tipList.append(
+    tip("Drag a command", "from the Cheat sheet into the terminal. NEWB types it for you and waits. You press Enter when you're happy with it."),
+    withKeys("Blue blanks", [" are for you to fill in. Just type. ", { key: "Tab" }, " jumps to the next blank."]),
+    tip("Drag a file or folder", "from Files into the terminal to type its name, or onto a blank to fill it."),
+    tip("Search in plain English", "in the cheat sheet, like \"delete a file\" or \"wifi\"."),
+    withKeys("Copy and paste:", [" ", { key: "Ctrl" }, "+", { key: "C" }, " copies when text is selected, and stops a running command when it isn't. ", { key: "Ctrl" }, "+", { key: "V" }, " pastes."]),
+    withKeys("Bigger or smaller:", [" ", { key: "Ctrl" }, "+", { key: "+" }, " and ", { key: "Ctrl" }, "+", { key: "-" }, " change the size of everything. Size is under Appearance."]),
+  );
+  const links = el("div", "st-links");
+  const cheats = el("button", "link-btn strong", "Open the cheat sheet");
+  const keys = el("button", "link-btn strong", "See all shortcuts");
+  for (const b of [cheats, keys]) b.type = "button";
+  cheats.addEventListener("click", () => openCheats?.());
+  keys.addEventListener("click", () => openKeys?.());
+  links.append(cheats, keys);
+  tips.append(tipList, links);
+  about.append(tips);
+  rows.push({ section: about, el: tips, text: "getting started tips help drag blanks copy paste zoom cheat sheet shortcuts" });
+
   const reset = el("button", "st-btn danger", "Reset all settings");
   reset.type = "button";
   reset.addEventListener("click", async () => {
@@ -310,8 +420,7 @@ export function createSettingsView({ host, display, toast, welcome, projects, ve
   /* ---------- Keeping the page in step ---------- */
 
   function refresh() {
-    const th = currentTheme();
-    for (const [id, b] of cards) b.classList.toggle("on", id === th.id);
+    markCards();
     sync.set(themeState().sync);
     lookSeg.set(display.state.panels);
     sizeSeg.set(Math.round(display.state.scale * 100) / 100);
@@ -364,6 +473,7 @@ export function createSettingsView({ host, display, toast, welcome, projects, ve
     focus: () => search.focus(),
     destroy() {
       resizer.disconnect();
+      unsubscribeThemes();
       unsubscribe();
       unsubscribePrefs();
       unsubscribeWelcome();

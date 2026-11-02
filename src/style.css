@@ -485,25 +485,6 @@ body.resizing { cursor: col-resize; user-select: none; }
 .tn-branch.fav-drop { margin: 0 0 4px 0; padding: 0; border: 1px dashed transparent; border-radius: 8px; }
 .tn-branch.fav-drop.drop-ready { background: rgba(var(--accent-rgb), 0.08); border-color: var(--accent); }
 
-/* ---------- Display popover (size and style) ---------- */
-.popover {
-  position: fixed;
-  top: calc(var(--bar-h, 34px) + 6px);
-  right: 10px;
-  z-index: 70;
-  width: 310px;
-  padding: 14px 16px 12px 16px;
-  background: var(--x12151a);
-  border: 1px solid var(--x2c313a);
-  border-radius: 10px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-  font-size: 13px;
-}
-.popover[hidden] { display: none; }
-.popover h3 { margin: 0 0 6px 0; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-.pop-row { display: flex; align-items: baseline; justify-content: space-between; margin: 12px 0 5px 0; }
-.pop-val { color: var(--accent); font-variant-numeric: tabular-nums; }
-.pop-hint { margin: 6px 0 0 0; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
 .step-btn { flex: none; width: 28px; height: 28px; border: 1px solid var(--x2c313a); border-radius: 6px; background: var(--x171a1f); color: var(--text); font-size: 16px; line-height: 1; cursor: pointer; }
 .step-btn:hover { border-color: var(--accent); }
 .seg { display: flex; overflow: hidden; border: 1px solid var(--x2c313a); border-radius: 8px; }
@@ -511,11 +492,10 @@ body.resizing { cursor: col-resize; user-select: none; }
 .seg button + button { border-left: 1px solid var(--x2c313a); }
 .seg button:hover { color: var(--text); }
 .seg button.on { background: var(--x1c2a3f); color: var(--text); }
-#display-reset { margin-top: 14px; }
 
 /* ====================================================================================
    Panel styles. Classic is the default look above. Flat and Terminal change the tab bar,
-   the Files panel and the Commands panel. Pick one in the Display popover (Aa).
+   the Files panel and the Commands panel. Pick one in Settings > Appearance.
    ==================================================================================== */
 
 /* ---------- Flat: like a file manager. No boxes, just clean rows. ---------- */
@@ -540,8 +520,7 @@ html[data-panels="flat"] .drawer header { border-bottom-color: var(--x1a1d23); }
 /* ---------- Terminal: techy. Monospace, green, square corners, text-style tree. ---------- */
 html[data-panels="terminal"] #tabbar,
 html[data-panels="terminal"] #explorer,
-html[data-panels="terminal"] .drawer,
-html[data-panels="terminal"] .popover {
+html[data-panels="terminal"] .drawer {
   font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono", monospace;
 }
 html[data-panels="terminal"] #explorer,
@@ -582,11 +561,9 @@ html[data-panels="terminal"] .panel-input:focus { border-color: var(--x3fb950); 
 html[data-panels="terminal"] .link-btn:hover { color: var(--x3fb950); }
 html[data-panels="terminal"] .fx-row.sel { background: var(--x12261a); }
 html[data-panels="terminal"] .fx-cd { border-radius: 0; color: var(--x3fb950); border-color: var(--x1c3324); }
-html[data-panels="terminal"] .popover { border-radius: 0; border-color: var(--x1c3324); background: var(--x0a0c0e); }
 html[data-panels="terminal"] .step-btn,
 html[data-panels="terminal"] .seg { border-radius: 0; border-color: var(--x1c3324); }
 html[data-panels="terminal"] .seg button.on { background: var(--x12261a); color: var(--x7ee787); }
-html[data-panels="terminal"] .pop-val { color: var(--x3fb950); }
 /* Search results */
 #cheat-results[hidden] { display: none; }
 .tn-leaf.result { margin: 4px 0; }
@@ -675,7 +652,7 @@ html[data-panels="terminal"] .bar-btn.active .ico,
 html[data-panels="terminal"] .link-btn.strong { color: var(--x3fb950); }
 
 /* ====================================================================================
-   Tabs inside the right panel, the Display and Info popovers, the right-click menu
+   Tabs inside the right panel and the right-click menu
    ==================================================================================== */
 .subtabs { display: flex; gap: 2px; padding: 6px 12px 0 12px; border-bottom: 1px solid var(--x1d2128); }
 .subtab { margin-bottom: -1px; padding: 6px 12px; border: none; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
@@ -683,31 +660,13 @@ html[data-panels="terminal"] .link-btn.strong { color: var(--x3fb950); }
 .subtab.on { color: var(--text); border-bottom-color: var(--accent); }
 html[data-panels="terminal"] .subtab.on { border-bottom-color: var(--x3fb950); }
 
-.popover .field { margin: 14px 0 0 0; }
-.popover .field:first-of-type { margin-top: 8px; }
-.field-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; font-size: 12.5px; }
 .stepper { display: flex; align-items: center; gap: 6px; }
-.stepper-fill { flex: 1; }
-.chips { display: flex; flex: 1; gap: 3px; justify-content: center; flex-wrap: nowrap; min-width: 0; }
-.chip { padding: 4px 5px; border: 1px solid var(--x262b33); border-radius: 6px; background: none; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
-.chip:hover { color: var(--text); border-color: var(--x3a4150); }
-.chip.on { color: var(--text); background: var(--x1c2a3f); border-color: var(--x2e4a72); }
 .seg { flex-wrap: nowrap; }
 .seg button { padding: 7px 4px; }
-.popover.wide { width: 380px; }
-.about-head { margin-bottom: 4px; }
-.about-name { font-size: 18px; font-weight: 700; letter-spacing: 0.12em; }
-.about-ver { margin-left: 6px; font-size: 11px; font-weight: 400; letter-spacing: 0; color: var(--muted); }
-.about-tag { margin-top: 2px; font-size: 12.5px; color: var(--muted); }
-.popover h4 { margin: 14px 0 6px 0; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .tips { font-size: 12.5px; line-height: 1.5; }
 .tips p { margin: 0 0 9px 0; }
 .tips b { color: var(--text); }
-.tips kbd, .about-foot kbd { font-size: 11px; }
-.about-actions { display: flex; gap: 16px; margin-top: 10px; }
-.about-foot { margin: 12px 0 0 0; font-size: 11px; color: var(--muted); }
-html[data-panels="terminal"] .chip.on { background: var(--x12261a); border-color: var(--x1c3324); color: var(--x7ee787); }
-html[data-panels="terminal"] .chip { border-radius: 0; }
+.tips kbd { font-size: 11px; }
 
 .ctx { position: fixed; z-index: 80; min-width: 190px; padding: 5px; background: var(--x12151a); border: 1px solid var(--x2c313a); border-radius: 8px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6); font-size: 13px; }
 .ctx[hidden] { display: none; }
@@ -949,7 +908,6 @@ html[data-panels="terminal"] #toggle-split.active { color: var(--x3fb950); }
 html[data-panels="terminal"] .theme-card, html[data-panels="terminal"] .st-search, html[data-panels="terminal"] .switch, html[data-panels="terminal"] .switch::after { border-radius: 0; }
 .st-row .seg { flex: none; }
 .st-row .stepper { flex: none; }
-.pop-links { display: flex; justify-content: space-between; margin-top: 12px; }
 html[data-theme-dark="0"] #hero #logo-wrap { filter: none !important; } /* a glow only looks good on dark */
 
 /* Settings that are switched with a bit of CSS */
@@ -972,3 +930,18 @@ html[data-show-search="0"] [data-fxview="search"] { display: none; }
 .st-btn.danger:hover { background: var(--x3a1d20); }
 .st-nav-item.on { background: var(--x1c2a3f); color: var(--text); }
 .seg button { white-space: nowrap; }
+
+.st-links { display: flex; gap: 18px; margin-top: 6px; }
+.st-links .link-btn { font-size: 12px; }
+.st-block .tips { margin-top: 8px; }
+
+/* Your own themes: a small edit / trash pair appears on a card when you hover it. */
+.theme-wrap { position: relative; }
+.theme-acts { position: absolute; top: 6px; right: 6px; display: none; gap: 4px; }
+.theme-wrap:hover .theme-acts, .theme-wrap:focus-within .theme-acts { display: flex; }
+.theme-acts button { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1px solid var(--x2c313a); border-radius: 6px; background: rgba(var(--panel-rgb), 0.9); color: var(--text); cursor: pointer; }
+.theme-acts button:hover { border-color: var(--accent); }
+.theme-acts .ico { width: 14px; height: 14px; }
+.st-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 10px 0; }
+.st-block .st-add { margin-top: 10px; }
+.theme-wrap .theme-card { width: 100%; }

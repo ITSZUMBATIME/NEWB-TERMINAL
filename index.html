@@ -14,8 +14,7 @@
         <button id="toggle-split" class="bar-btn icon-only" data-icon="split" title="Editor beside terminal (Ctrl+Shift+B)" aria-label="Editor beside terminal"></button>
         <button id="open-cheats" class="bar-btn" data-icon="commands" title="Cheat sheet (Ctrl+Shift+S)"><span>Cheat sheet</span></button>
         <button id="open-keys" class="bar-btn" data-icon="keyboard" title="Shortcuts (Ctrl+Shift+K)"><span>Shortcuts</span></button>
-        <button id="open-display" class="bar-btn icon-only" data-icon="display" title="Display: size and looks" aria-label="Display"></button>
-        <button id="open-info" class="bar-btn icon-only" data-icon="info" title="About and help" aria-label="About and help"></button>
+        <button id="open-settings" class="bar-btn icon-only" data-icon="settings" title="Settings (Ctrl+,)" aria-label="Settings"></button>
       </div>
 
       <div id="hero" data-logo="code" data-layout="pinned">
@@ -110,81 +109,6 @@
           <div id="keys-body" class="drawer-body"></div>
         </div>
       </aside>
-
-      <!-- Display: how big things are, and how NEWB looks. No sliders, just a few clear choices. -->
-      <div id="display-pop" class="popover" hidden>
-        <h3>Display</h3>
-
-        <div class="field">
-          <div class="field-head"><span>Size</span><span id="scale-val" class="pop-val">100%</span></div>
-          <div class="stepper">
-            <button id="scale-down" class="step-btn" title="Smaller (Ctrl -)" aria-label="Smaller">&minus;</button>
-            <div id="scale-chips" class="chips"></div>
-            <button id="scale-up" class="step-btn" title="Bigger (Ctrl +)" aria-label="Bigger">+</button>
-          </div>
-          <p class="pop-hint">Makes everything bigger or smaller: icons, panels, text. Ctrl + and Ctrl - do the same.</p>
-        </div>
-
-        <div class="field">
-          <div class="field-head"><span>Terminal text</span><span id="font-val" class="pop-val">14 px</span></div>
-          <div class="stepper">
-            <button id="font-down" class="step-btn" title="Smaller text" aria-label="Smaller text">&minus;</button>
-            <div class="stepper-fill"></div>
-            <button id="font-up" class="step-btn" title="Bigger text" aria-label="Bigger text">+</button>
-          </div>
-        </div>
-
-        <div class="field">
-          <div class="field-head"><span>Look</span></div>
-          <div id="panel-style" class="seg">
-            <button data-style="classic">Classic</button>
-            <button data-style="flat">Flat</button>
-            <button data-style="terminal">Terminal</button>
-          </div>
-        </div>
-
-        <div class="field">
-          <div class="field-head"><span>Editor</span></div>
-          <div id="seg-editor" class="seg"></div>
-          <p class="pop-hint">Friendly is normal typing. Vim is for people who already know Vim keys.</p>
-        </div>
-
-        <div class="field">
-          <div class="field-head"><span>Welcome screen</span></div>
-          <div id="seg-layout" class="seg"></div>
-        </div>
-
-        <div class="field">
-          <div class="field-head"><span>Logo</span></div>
-          <div id="seg-logo" class="seg"></div>
-        </div>
-
-        <div class="pop-links"><button id="display-reset" class="link-btn">Reset to defaults</button><button id="open-settings" class="link-btn strong">More settings</button></div>
-      </div>
-
-      <!-- About and help -->
-      <div id="info-pop" class="popover wide" hidden>
-        <div class="about-head">
-          <div class="about-name">NEWB <span id="about-ver" class="about-ver"></span></div>
-          <div class="about-tag">A terminal for people who are new to the terminal.</div>
-        </div>
-
-        <h4>Getting started</h4>
-        <div class="tips">
-          <p><b>Drag a command</b> from the Cheat sheet into the terminal. NEWB types it for you and waits. You press Enter when you're happy with it.</p>
-          <p><b>Blue blanks</b> are for you to fill in. Just type. <kbd>Tab</kbd> jumps to the next blank.</p>
-          <p><b>Drag a file or folder</b> from Files into the terminal to type its name, or onto a blank to fill it.</p>
-          <p><b>Search in plain English</b> in the cheat sheet, like "delete a file" or "wifi".</p>
-          <p><kbd>Ctrl</kbd>+<kbd>C</kbd> copies when text is selected, and stops a running command when it isn't. <kbd>Ctrl</kbd>+<kbd>V</kbd> pastes.</p>
-          <p>Make everything bigger or smaller with <kbd>Ctrl</kbd>+<kbd>+</kbd> and <kbd>Ctrl</kbd>+<kbd>-</kbd>. The <b>Display</b> button has more.</p>
-        </div>
-
-        <div class="about-actions">
-          <button id="about-cheats" class="link-btn strong">Open the cheat sheet</button>
-          <button id="about-keys" class="link-btn strong">See all shortcuts</button>
-        </div>
-        <p class="about-foot">Open source (MIT). github.com/ITSZUMBATIME/NEWB-TERMINAL</p>
-      </div>
 
       <!-- Right-click menu for the terminal -->
       <div id="ctx-menu" class="ctx" hidden></div>

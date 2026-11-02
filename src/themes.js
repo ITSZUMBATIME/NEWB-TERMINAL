@@ -147,9 +147,9 @@ function terminalColours(theme) {
   const out = {
     background: theme.bg,
     foreground: theme.ink,
-    cursor: theme.ink,
+    cursor: theme.cursor || theme.ink,
     cursorAccent: theme.bg,
-    selectionBackground: toHex(mix(hexToRgb(theme.bg), hexToRgb(theme.ink), 0.22)),
+    selectionBackground: theme.selection || toHex(mix(hexToRgb(theme.bg), hexToRgb(theme.ink), 0.22)),
   };
   names.forEach((n, i) => {
     out[n] = theme.ansi[i];
@@ -161,9 +161,12 @@ function terminalColours(theme) {
 /* ---------- Choosing and applying ---------- */
 
 const KEY = "akin.theme.v1";
+const CUSTOM_KEY = "akin.theme.custom.v1"; // the last list of your own themes, so they are there from the first frame
 const DEFAULT_ID = "newb-dark";
-const byId = (id) => THEMES.find((x) => x.id === id) || THEMES[0];
+let custom = []; // your own themes (from the themes folder), see customthemes.js
+const byId = (id) => THEMES.find((x) => x.id === id) || custom.find((x) => x.id === id) || THEMES[0];
 const listeners = new Set();
+const listListeners = new Set();
 let state = { id: DEFAULT_ID, sync: false, darkId: DEFAULT_ID, lightId: "newb-light" };
 let current = THEMES[0];
 
@@ -172,6 +175,10 @@ function load() {
     const saved = JSON.parse(localStorage.getItem(KEY));
     if (saved && typeof saved === "object") state = { ...state, ...saved };
   } catch (_) { /* default */ }
+  try {
+    const cached = JSON.parse(localStorage.getItem(CUSTOM_KEY));
+    if (Array.isArray(cached)) custom = cached.filter((x) => x && typeof x.id === "string" && x.id.startsWith("custom:"));
+  } catch (_) { /* none yet */ }
 }
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (_) { /* fine */ }
@@ -199,6 +206,37 @@ function apply(theme) {
 
 export const currentTheme = () => current;
 export const themeState = () => ({ ...state });
+export const customThemes = () => custom;
+export const allThemes = () => [...THEMES, ...custom];
+
+/** Be told when the list of your own themes changes. */
+export function onThemesListChange(fn) {
+  listListeners.add(fn);
+  return () => listListeners.delete(fn);
+}
+
+/**
+ * Give the engine the current list of your own themes (from the themes folder).
+ * If the theme in use was edited, it is redrawn on the spot. If it was deleted, NEWB goes back to
+ * the default and this returns its name so the caller can say so.
+ */
+export function setCustomThemes(list) {
+  const wantedId = effectiveId();
+  const before = custom.find((x) => x.id === wantedId);
+  custom = list;
+  try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(list)); } catch (_) { /* fine */ }
+  let removed = null;
+  const missing = (id) => typeof id === "string" && id.startsWith("custom:") && !custom.some((x) => x.id === id);
+  if (missing(wantedId)) removed = before ? before.name : wantedId.slice("custom:".length);
+  for (const slot of ["id", "darkId", "lightId"]) {
+    if (missing(state[slot])) state[slot] = slot === "lightId" ? "newb-light" : DEFAULT_ID;
+  }
+  if (removed) save();
+  const wanted = byId(effectiveId());
+  if (removed || JSON.stringify(wanted) !== JSON.stringify(current)) apply(wanted);
+  for (const fn of listListeners) fn(custom);
+  return removed;
+}
 
 /** Be told whenever the theme changes (including once right after you subscribe if `now` is true). */
 export function onThemeChange(fn, now = false) {
