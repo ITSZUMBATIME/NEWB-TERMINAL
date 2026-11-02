@@ -1,4 +1,4 @@
-// AKIN's icons. All drawn as simple outlines on a 24 x 24 grid, so they scale cleanly at any
+// NEWB's icons. All drawn as simple outlines on a 24 x 24 grid, so they scale cleanly at any
 // interface size and can change look with the theme (colour, line thickness, corners).
 //
 //   icon("folder")            an icon by name

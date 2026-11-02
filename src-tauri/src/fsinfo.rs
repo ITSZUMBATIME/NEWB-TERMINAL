@@ -1,4 +1,4 @@
-// Folder browsing for the file explorer panel. Read-only: AKIN only looks, it never changes files here.
+// Folder browsing for the file explorer panel. Read-only: NEWB only looks, it never changes files here.
 
 use std::{cmp::Ordering, fs, path::Path};
 

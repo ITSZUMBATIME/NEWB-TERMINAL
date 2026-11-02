@@ -1,4 +1,4 @@
-// AKIN colours. Used by the terminal itself and by the system info display.
+// NEWB colours. Used by the terminal itself and by the system info display.
 
 export const THEME = {
   background: "#14161a",

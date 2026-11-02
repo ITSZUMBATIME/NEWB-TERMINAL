@@ -1,4 +1,4 @@
-// Display settings: how big everything is, and how AKIN looks.
+// Display settings: how big everything is, and how NEWB looks.
 //
 //   Size            scales the whole window: buttons, icons, panels, the logo and text.
 //                   Works like zoom in a web browser (Ctrl +, Ctrl -, Ctrl 0, or Ctrl + mouse wheel).

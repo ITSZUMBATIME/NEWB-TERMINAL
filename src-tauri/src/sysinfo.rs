@@ -1,4 +1,4 @@
-// Reads basic facts about your computer (like fastfetch does) so AKIN can show
+// Reads basic facts about your computer (like fastfetch does) so NEWB can show
 // them when it opens. Everything here is read-only and fails quietly: if a fact
 // can't be found, that line is just left out.
 
@@ -241,7 +241,7 @@ fn builtin_lines() -> Vec<String> {
     items.extend(line("Uptime", uptime()));
     items.extend(line("Shell", shell));
     items.extend(line("Desktop", desktop));
-    items.extend(line("Terminal", format!("AKIN {}", env!("CARGO_PKG_VERSION"))));
+    items.extend(line("Terminal", format!("NEWB {}", env!("CARGO_PKG_VERSION"))));
     items.extend(line("CPU", cpu()));
     for (i, g) in gpus().into_iter().enumerate() {
         items.extend(line(&format!("GPU {}", i + 1), g));

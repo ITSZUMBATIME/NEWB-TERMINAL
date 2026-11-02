@@ -1,4 +1,4 @@
-// The (i) button: what AKIN is, how to get started, and where to find more.
+// The (i) button: what NEWB is, how to get started, and where to find more.
 
 import { makePopover } from "./ui.js";
 import pkg from "../package.json";

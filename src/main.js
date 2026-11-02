@@ -1,4 +1,4 @@
-// AKIN: the window side.
+// NEWB: the window side.
 // Shows a terminal (xterm.js) for each tab and connects it to a real shell
 // that the Rust side runs. Also draws the logo and the system info.
 
@@ -219,6 +219,16 @@ function wheelZoom(e) {
   display?.stepScale(e.deltaY < 0 ? 1 : -1);
 }
 
+// How far a wheel turn moves, in pixels, and how tall one line of the terminal is.
+function wheelPixels(tab, e) {
+  const screen = tab.term.element?.querySelector(".xterm-screen");
+  const cellH = screen ? screen.clientHeight / tab.term.rows : 16;
+  let dy = e.deltaY;
+  if (e.deltaMode === 1) dy *= cellH;
+  else if (e.deltaMode === 2) dy *= tab.holder.clientHeight;
+  return { dy, cellH };
+}
+
 function handleWheel(tab, e) {
   if (e.ctrlKey) {
     wheelZoom(e);
@@ -226,11 +236,7 @@ function handleWheel(tab, e) {
   }
   const H = headerHeight();
   if (!H) return true;
-  const screen = tab.term.element?.querySelector(".xterm-screen");
-  const cellH = screen ? screen.clientHeight / tab.term.rows : 16;
-  let dy = e.deltaY;
-  if (e.deltaMode === 1) dy *= cellH;
-  else if (e.deltaMode === 2) dy *= tab.holder.clientHeight;
+  const { dy } = wheelPixels(tab, e);
   if (!dy) return true;
 
   const buf = tab.term.buffer.active;
@@ -248,6 +254,20 @@ function handleWheel(tab, e) {
     return false;
   }
   return true;
+}
+
+// Scrolling works wherever the mouse is. Over the terminal itself xterm handles it (through
+// handleWheel above). Over the welcome header, which sits on top, we do the same thing here:
+// slide the header away, or scroll the terminal's history.
+function scrollFromPanes(e) {
+  if (e.target.closest(".xterm")) return;
+  const tab = activeTab();
+  if (!tab || !tab.opened) return;
+  if (handleWheel(tab, e) === false) return; // the header moved (or it was a zoom)
+  const { dy, cellH } = wheelPixels(tab, e);
+  if (!dy) return;
+  e.preventDefault();
+  tab.term.scrollLines(Math.sign(dy) * Math.max(1, Math.round(Math.abs(dy) / cellH)));
 }
 
 /* ---------- Tabs ---------- */
@@ -429,7 +449,7 @@ async function newTab() {
       explorerApi?.toggle();
       return false;
     }
-    if (k === "i") {
+    if (k === "h") {
       e.preventDefault();
       aboutApi?.popover.toggle();
       return false;
@@ -497,9 +517,9 @@ async function start() {
     if (e.key === "Tab") {
       e.preventDefault();
       cycleTab(e.shiftKey ? -1 : 1);
-    } else if (e.shiftKey && "iwtel".includes(k) && k.length === 1) {
+    } else if (e.shiftKey && "hwtel".includes(k) && k.length === 1) {
       e.preventDefault();
-      if (k === "i") aboutApi?.popover.toggle();
+      if (k === "h") aboutApi?.popover.toggle();
       else if (k === "t") newTab();
       else if (k === "w") closeTab(activeId);
       else if (k === "e") explorerApi?.toggle();
@@ -578,6 +598,8 @@ async function start() {
     if (e.target.closest("#info")) return;
     setTimeout(() => activeTab()?.term.focus(), 0);
   });
+
+  panesEl.addEventListener("wheel", scrollFromPanes, { passive: false });
 
   newTabBtn.addEventListener("click", newTab);
   // After clicking a control, hand the keyboard back to the terminal so shortcuts keep working.

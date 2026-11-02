@@ -1,6 +1,6 @@
 // Commands with blanks.
 //
-// When you drop "cp {{file}} {{to}}", AKIN types "cp FILE TO" and highlights FILE and TO.
+// When you drop "cp {{file}} {{to}}", NEWB types "cp FILE TO" and highlights FILE and TO.
 // You just start typing: your words replace the highlighted blank. Tab jumps to the next
 // blank, Shift+Tab goes back. Enter won't run the command until every blank is filled.
 // Pressing arrows, Ctrl+C or Esc simply ends this and leaves you with a normal command line.
@@ -95,7 +95,7 @@ function finish(tab, t, io) {
 }
 
 /**
- * Called for every key press in the tab. Returns true if AKIN handled it
+ * Called for every key press in the tab. Returns true if NEWB handled it
  * (so it must not also be sent to the shell).
  */
 export function handleTemplateKey(tab, data, io) {

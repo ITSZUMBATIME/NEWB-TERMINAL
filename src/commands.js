@@ -1,4 +1,4 @@
-// The commands AKIN knows about, in plain English.
+// The commands NEWB knows about, in plain English.
 //
 // There are two lists here:
 //   TREE (further down)  what you browse in the Commands panel.
@@ -8,7 +8,7 @@
 //
 // Blanks: write {{name}} where the person has to fill something in.
 //   "cp {{file}} {{to}}" drops in as "cp FILE TO" with FILE and TO highlighted.
-// risky: true means "this can delete or change things", so AKIN warns when it is dropped.
+// risky: true means "this can delete or change things", so NEWB warns when it is dropped.
 // keys: extra words people might search for.
 
 export const CATEGORIES = [
@@ -145,6 +145,21 @@ export const ESSENTIALS = [
 // Every shortcut, grouped. keys is shown as separate key caps. what is plain English.
 export const SHORTCUTS = [
   {
+    name: "Terminal basics",
+    rows: [
+      { keys: ["Enter"], what: "Run what you have typed." },
+      { keys: ["Tab"], what: "Finish a file or command name for you." },
+      { keys: ["Up", "Down"], what: "Step through commands you used before." },
+      { keys: ["Ctrl", "C"], what: "Stop a command that is running (when no text is selected)." },
+      { keys: ["Ctrl", "L"], what: "Clear the screen." },
+      { keys: ["Ctrl", "R"], what: "Search your past commands." },
+      { keys: ["Ctrl", "A"], what: "Jump to the start of the line." },
+      { keys: ["Ctrl", "E"], what: "Jump to the end of the line." },
+      { keys: ["Ctrl", "U"], what: "Delete everything before the cursor." },
+      { keys: ["Ctrl", "D"], what: "Close the shell on an empty line (closes the tab)." },
+    ],
+  },
+  {
     name: "Copy and paste",
     rows: [
       { keys: ["Ctrl", "C"], what: "Copy the selected text. If nothing is selected, it stops the running command instead." },
@@ -152,6 +167,15 @@ export const SHORTCUTS = [
       { keys: ["Ctrl", "Shift", "C"], what: "Always copy the selected text." },
       { keys: ["Ctrl", "Shift", "V"], what: "Always paste." },
       { keys: ["Right-click"], what: "A menu with Copy, Paste, Select all and Clear screen." },
+    ],
+  },
+  {
+    name: "Filling in blanks",
+    rows: [
+      { keys: ["Tab"], what: "Jump to the next blue blank." },
+      { keys: ["Shift", "Tab"], what: "Jump back to the previous blank." },
+      { keys: ["Enter"], what: "Runs the command, but only once every blank is filled in." },
+      { keys: ["Arrow keys"], what: "Stop filling in blanks and edit the line yourself." },
     ],
   },
   {
@@ -170,7 +194,7 @@ export const SHORTCUTS = [
       { keys: ["Ctrl", "Shift", "S"], what: "Show or hide the cheat sheet." },
       { keys: ["Ctrl", "Shift", "D"], what: "Open the cheat sheet with the search box ready." },
       { keys: ["Ctrl", "Shift", "K"], what: "Show this list of shortcuts." },
-      { keys: ["Ctrl", "Shift", "I"], what: "About AKIN and getting started." },
+      { keys: ["Ctrl", "Shift", "H"], what: "About NEWB, help and getting started." },
       { keys: ["Esc"], what: "Close the panel you're in." },
     ],
   },
@@ -184,31 +208,10 @@ export const SHORTCUTS = [
     ],
   },
   {
-    name: "Filling in blanks",
-    rows: [
-      { keys: ["Tab"], what: "Jump to the next blue blank." },
-      { keys: ["Shift", "Tab"], what: "Jump back to the previous blank." },
-      { keys: ["Enter"], what: "Runs the command, but only once every blank is filled in." },
-      { keys: ["Arrow keys"], what: "Stop filling in blanks and edit the line yourself." },
-    ],
-  },
-  {
     name: "Welcome screen",
     rows: [
       { keys: ["Ctrl", "Shift", "L"], what: "Try another logo style." },
       { keys: ["Scroll up"], what: "Bring the header with the logo back into view." },
-    ],
-  },
-  {
-    name: "Terminal basics",
-    rows: [
-      { keys: ["Tab"], what: "Finish a file or command name for you." },
-      { keys: ["Up", "Down"], what: "Step through commands you used before." },
-      { keys: ["Ctrl", "R"], what: "Search your past commands." },
-      { keys: ["Ctrl", "L"], what: "Clear the screen." },
-      { keys: ["Ctrl", "A"], what: "Jump to the start of the line." },
-      { keys: ["Ctrl", "E"], what: "Jump to the end of the line." },
-      { keys: ["Ctrl", "U"], what: "Delete everything before the cursor." },
     ],
   },
 ];
@@ -354,7 +357,7 @@ export const TREE = [
   g("Your computer",
     g("About this computer",
       c("Who am I?", "whoami", "Shows the name of the user you're logged in as."),
-      c("Everything at a glance", "fastfetch", "Shows a summary of your computer, like the header at the top of AKIN."),
+      c("Everything at a glance", "fastfetch", "Shows a summary of your computer, like the header at the top of NEWB."),
       c("Operating system version", "cat /etc/os-release", "Shows which Linux and which version you're running."),
       c("Kernel and machine details", "uname -a", "Prints the kernel version and your computer's name."),
       c("Processor details", "lscpu", "Lists your processor's model, cores and speed."),

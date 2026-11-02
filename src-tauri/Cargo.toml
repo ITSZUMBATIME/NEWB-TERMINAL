@@ -1,11 +1,11 @@
 [package]
-name = "akin-terminal"
+name = "newb-terminal"
 version = "0.1.0"
-description = "AKIN: a beginner-friendly terminal"
+description = "NEWB: a beginner-friendly terminal"
 edition = "2021"
 
 [lib]
-name = "akin_terminal_lib"
+name = "newb_terminal_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

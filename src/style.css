@@ -627,8 +627,8 @@ html[data-panels="terminal"] .subtab.on { border-bottom-color: #3fb950; }
 .about-ver { margin-left: 6px; font-size: 11px; font-weight: 400; letter-spacing: 0; color: var(--muted); }
 .about-tag { margin-top: 2px; font-size: 12.5px; color: var(--muted); }
 .popover h4 { margin: 14px 0 6px 0; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-.tips { margin: 0; padding: 0 0 0 18px; font-size: 12.5px; line-height: 1.5; }
-.tips li { margin: 0 0 6px 0; padding-left: 2px; }
+.tips { font-size: 12.5px; line-height: 1.5; }
+.tips p { margin: 0 0 9px 0; }
 .tips b { color: var(--text); }
 .tips kbd, .about-foot kbd { font-size: 11px; }
 .about-actions { display: flex; gap: 16px; margin-top: 10px; }

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AKIN</title>
+    <title>NEWB</title>
   </head>
   <body>
     <div id="app">
@@ -14,7 +14,7 @@
         <button id="open-cheats" class="bar-btn" data-icon="commands" title="Cheat sheet (Ctrl+Shift+S)"><span>Cheat sheet</span></button>
         <button id="open-keys" class="bar-btn" data-icon="keyboard" title="Shortcuts (Ctrl+Shift+K)"><span>Shortcuts</span></button>
         <button id="open-display" class="bar-btn icon-only" data-icon="display" title="Display: size and looks" aria-label="Display"></button>
-        <button id="open-info" class="bar-btn icon-only" data-icon="info" title="About and help (Ctrl+Shift+I)" aria-label="About and help"></button>
+        <button id="open-info" class="bar-btn icon-only" data-icon="info" title="About and help (Ctrl+Shift+H)" aria-label="About and help"></button>
       </div>
 
       <div id="hero" data-logo="code" data-layout="pinned">
@@ -80,7 +80,7 @@
         </div>
       </aside>
 
-      <!-- Display: how big things are, and how AKIN looks. No sliders, just a few clear choices. -->
+      <!-- Display: how big things are, and how NEWB looks. No sliders, just a few clear choices. -->
       <div id="display-pop" class="popover" hidden>
         <h3>Display</h3>
 
@@ -128,19 +128,19 @@
       <!-- About and help -->
       <div id="info-pop" class="popover wide" hidden>
         <div class="about-head">
-          <div class="about-name">AKIN <span id="about-ver" class="about-ver"></span></div>
+          <div class="about-name">NEWB <span id="about-ver" class="about-ver"></span></div>
           <div class="about-tag">A terminal for people who are new to the terminal.</div>
         </div>
 
         <h4>Getting started</h4>
-        <ul class="tips">
-          <li><b>Drag a command</b> from the Cheat sheet into the terminal. AKIN types it for you and waits. You press Enter when you're happy with it.</li>
-          <li><b>Blue blanks</b> are for you to fill in. Just type. <kbd>Tab</kbd> jumps to the next blank.</li>
-          <li><b>Drag a file or folder</b> from Files into the terminal to type its name, or onto a blank to fill it.</li>
-          <li><b>Search in plain English</b> in the cheat sheet, like "delete a file" or "wifi".</li>
-          <li><kbd>Ctrl</kbd>+<kbd>C</kbd> copies when text is selected, and stops a running command when it isn't. <kbd>Ctrl</kbd>+<kbd>V</kbd> pastes.</li>
-          <li>Make everything bigger or smaller with <kbd>Ctrl</kbd>+<kbd>+</kbd> and <kbd>Ctrl</kbd>+<kbd>-</kbd>. The <b>Display</b> button has more.</li>
-        </ul>
+        <div class="tips">
+          <p><b>Drag a command</b> from the Cheat sheet into the terminal. NEWB types it for you and waits. You press Enter when you're happy with it.</p>
+          <p><b>Blue blanks</b> are for you to fill in. Just type. <kbd>Tab</kbd> jumps to the next blank.</p>
+          <p><b>Drag a file or folder</b> from Files into the terminal to type its name, or onto a blank to fill it.</p>
+          <p><b>Search in plain English</b> in the cheat sheet, like "delete a file" or "wifi".</p>
+          <p><kbd>Ctrl</kbd>+<kbd>C</kbd> copies when text is selected, and stops a running command when it isn't. <kbd>Ctrl</kbd>+<kbd>V</kbd> pastes.</p>
+          <p>Make everything bigger or smaller with <kbd>Ctrl</kbd>+<kbd>+</kbd> and <kbd>Ctrl</kbd>+<kbd>-</kbd>. The <b>Display</b> button has more.</p>
+        </div>
 
         <div class="about-actions">
           <button id="about-cheats" class="link-btn strong">Open the cheat sheet</button>

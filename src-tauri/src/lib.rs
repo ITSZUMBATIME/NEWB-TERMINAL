@@ -1,4 +1,4 @@
-// AKIN: the Rust side.
+// NEWB: the Rust side.
 // Its job: start a real shell (bash, zsh...) for each tab, pass the keys you type
 // into it, and pass everything the shell prints back to the window.
 
@@ -220,5 +220,5 @@ pub fn run() {
             sysinfo::system_info
         ])
         .run(tauri::generate_context!())
-        .expect("error while running AKIN");
+        .expect("error while running NEWB");
 }

@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 
-// Vite packages the web side of AKIN. Tauri expects it on port 1420 while developing.
+// Vite packages the web side of NEWB. Tauri expects it on port 1420 while developing.
 export default defineConfig({
   clearScreen: false,
   server: {

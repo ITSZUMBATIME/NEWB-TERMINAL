@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "AKIN",
+  "productName": "NEWB",
   "version": "0.1.0",
   "identifier": "dev.akin.terminal",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "AKIN",
+        "title": "NEWB",
         "width": 1440,
         "height": 900
       }
