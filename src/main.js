@@ -27,6 +27,8 @@ import pkg from "../package.json";
 import { createSettingsView } from "./settings.js";
 import { initCustomThemes } from "./customthemes.js";
 import { initLogo } from "./logo.js";
+import { initTour } from "./tour.js";
+import { initThemePicker } from "./themepicker.js";
 
 initThemes(); // colours first, so nothing flashes the wrong theme
 
@@ -150,6 +152,8 @@ let drawersApi = null;
 let display = null;
 let customThemes = null;
 let logoApi = null;
+let tourApi = null;
+let themePicker = null;
 let explorerApi = null;
 let homeDir = "";
 
@@ -584,6 +588,11 @@ async function newTab() {
       toggleSplit();
       return false;
     }
+    if (k === "p") {
+      e.preventDefault();
+      themePicker?.open();
+      return false;
+    }
     if (k === "i") return false; // not used by NEWB: nothing is typed into the shell either
     return true;
   });
@@ -824,6 +833,11 @@ function terminalForAction() {
 }
 
 async function start() {
+  // The first-run tour (only ever starts by itself on a brand new install, so ask before anything is saved).
+  tourApi = initTour({ prepare: () => drawersApi?.closeInstant() });
+  tourApi.maybeStart();
+  document.getElementById("take-tour").addEventListener("click", () => tourApi.start());
+
   // Listen first, so no shell output is missed.
   await listen("pty-output", (e) => {
     const t = tabs.find((x) => x.id === e.payload.id);
@@ -853,6 +867,7 @@ async function start() {
     },
   });
   customThemes.start();
+  themePicker = initThemePicker({ toast, focusBack: focusActive });
   // Everything that is drawn in JavaScript follows the theme.
   onThemeChange((theme) => {
     setLogoColors({ code: hexToRgb(theme.green), shade: hexToRgb(theme.ink), dots: hexToRgb(theme.accent) });
@@ -885,7 +900,7 @@ async function start() {
     if (e.key === "Tab") {
       e.preventDefault();
       cycleTab(e.shiftKey ? -1 : 1);
-    } else if (e.shiftKey && "wtelfb".includes(k) && k.length === 1) {
+    } else if (e.shiftKey && "wtelfbp".includes(k) && k.length === 1) {
       e.preventDefault();
       if (k === "t") newTab();
       else if (k === "w") closeTab(activeId);
@@ -893,6 +908,7 @@ async function start() {
       else if (k === "f") explorerApi?.showSearch();
       else if (k === "b") toggleSplit();
       else if (k === "l") cycleLogo();
+      else if (k === "p") themePicker?.open();
     } else if (e.key === "," && !e.shiftKey) {
       e.preventDefault();
       openSettings();

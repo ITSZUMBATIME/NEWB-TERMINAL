@@ -260,6 +260,16 @@ export function setTheme(id) {
   return theme;
 }
 
+/** Show a theme without choosing it (the theme picker uses this while you move through the list). */
+export function previewTheme(id) {
+  apply(byId(id));
+}
+
+/** Put back the theme you actually chose, after previewing. */
+export function endPreview() {
+  apply(byId(effectiveId()));
+}
+
 export function setSync(on) {
   state.sync = Boolean(on);
   if (on) {

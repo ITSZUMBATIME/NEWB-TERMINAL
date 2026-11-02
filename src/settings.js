@@ -150,7 +150,7 @@ export function createSettingsView({ host, display, toast, welcome, projects, ve
   for (const th of THEMES) (th.dark ? darkOnes : lightOnes).append(themeCard(th));
   gallery.append(el("div", "st-sub", "Dark"), darkOnes, el("div", "st-sub", "Light"), lightOnes);
   const galleryRow = el("div", "st-block");
-  galleryRow.append(el("div", "st-label", "Theme"), el("div", "st-hint", "One click recolours everything: the terminal, the editor, the panels and the header."), gallery);
+  galleryRow.append(el("div", "st-label", "Theme"), el("div", "st-hint", "One click recolours everything: the terminal, the editor, the panels and the header. Ctrl+Shift+P opens a quick picker from anywhere."), gallery);
   look.append(galleryRow);
   rows.push({ section: look, el: galleryRow, text: "theme colour colours dark light nord dracula gruvbox solarized catppuccin tokyo monokai github one pine" });
 
