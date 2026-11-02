@@ -23,6 +23,8 @@ import { createEditor } from "./editor.js";
 import { parseSpec, startTemplate, handleTemplateKey, cancelTemplate, fillBlank, refresh as refreshTemplate } from "./template.js";
 import { AsciiLogo, ASCII_STYLES, setLogoColors } from "./asciilogo.js";
 import { initThemes, onThemeChange, hexToRgb } from "./themes.js";
+import { prefs } from "./prefs.js";
+import pkg from "../package.json";
 import { createSettingsView } from "./settings.js";
 
 initThemes(); // colours first, so nothing flashes the wrong theme
@@ -77,11 +79,23 @@ function setLogo(i, announce) {
   asciiLogo.setStyle(logo.id);
   logoSeg?.set(logo.id);
   saveSetting("akin.logo.v2", logo.id);
+  welcomeListeners.forEach((fn) => fn());
   if (announce) toast(`Logo: ${logo.name}.`, 2000);
 }
 function textLogoStyle() {
   return LOGOS[logoIndex].id === "shade" ? "shade" : "code";
 }
+const welcomeListeners = new Set();
+const welcomeApi = {
+  layouts: () => LAYOUTS.map((l) => ({ id: l.id, label: l.name })),
+  logos: () => LOGOS.map((l) => ({ id: l.id, label: l.name })),
+  layout: () => LAYOUTS[layoutIndex].id,
+  logo: () => LOGOS[logoIndex].id,
+  setLayout: (id) => setLayout(LAYOUTS.findIndex((l) => l.id === id), true),
+  setLogo: (id) => setLogo(LOGOS.findIndex((l) => l.id === id), false),
+  subscribe: (fn) => (welcomeListeners.add(fn), () => welcomeListeners.delete(fn)),
+};
+
 function cycleLogo() {
   if (heroEl.dataset.layout === "text") {
     // The printed banner can use the two character styles. New tabs pick up the change.
@@ -119,6 +133,7 @@ function setLayout(i, announce) {
   heroEl.dataset.layout = layout.id;
   layoutSeg?.set(layout.id);
   saveSetting("akin.layout.v4", layout.id);
+  welcomeListeners.forEach((fn) => fn());
   if (announce) toast(`Welcome screen: ${layout.name}, ${layout.hint}`, 4500);
 }
 
@@ -418,8 +433,9 @@ async function newTab() {
   const term = new Terminal({
     fontFamily: '"JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono", monospace',
     fontSize: display ? display.state.font : 14,
-    cursorBlink: true,
-    scrollback: 5000,
+    cursorBlink: prefs.get("cursorBlink"),
+    cursorStyle: prefs.get("cursorStyle"),
+    scrollback: prefs.get("scrollback"),
     theme: THEME,
     allowProposedApi: true, // needed to highlight blanks in dropped commands
   });
@@ -623,6 +639,8 @@ async function openFile(path, at) {
     path,
     text: file.text,
     vim: display?.state.editor === "vim",
+    tabSize: prefs.get("tabSize"),
+    wordWrap: prefs.get("wordWrap"),
     onDirty: (dirty) => {
       tab.dirty = dirty;
       tabEl.classList.toggle("dirty", dirty);
@@ -667,10 +685,17 @@ function openSettings(sectionId) {
   tabEl.append(icon("display"), labelEl, closeEl);
   tabsEl.appendChild(tabEl);
 
-  const view = createSettingsView({ host: holder, display, toast });
+  const view = createSettingsView({
+    host: holder,
+    display,
+    toast,
+    welcome: welcomeApi,
+    projects: explorerApi?.repos,
+    version: pkg.version,
+  });
   const tab = {
     id, kind: "settings", path: null, name: "Settings", pane, holder, s: 0, tabEl, labelEl, opened: true, dirty: false, view,
-    editor: { focus() {}, insertText() {}, goTo() {}, setVim() {}, setTheme() {}, getText: () => "", markSaved() {}, destroy: () => view.destroy() },
+    editor: { focus() {}, insertText() {}, goTo() {}, setVim() {}, setTheme() {}, setLayout() {}, getText: () => "", markSaved() {}, destroy: () => view.destroy() },
   };
   tabs.push(tab);
   tabEl.addEventListener("click", () => activate(id));
@@ -793,6 +818,17 @@ async function start() {
     if (infoModel) renderWeb(infoModel, infoEls);
     if (asciiLogo.style) asciiLogo.setStyle(asciiLogo.style); // redraw in the new colours
   }, true);
+  prefs.subscribe((key, value) => {
+    for (const t of tabs) {
+      if (isTerm(t)) {
+        if (key === "cursorStyle" && !t.template) t.term.options.cursorStyle = value;
+        if (key === "cursorBlink") t.term.options.cursorBlink = value;
+        if (key === "scrollback") t.term.options.scrollback = value;
+      } else if (key === "tabSize" || key === "wordWrap") {
+        t.editor.setLayout(prefs.get("tabSize"), prefs.get("wordWrap"));
+      }
+    }
+  });
   document.getElementById("open-settings").addEventListener("click", () => {
     display.popover.close();
     openSettings();

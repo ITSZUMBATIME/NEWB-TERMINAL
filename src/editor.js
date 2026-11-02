@@ -4,7 +4,7 @@
 
 import { EditorView, keymap } from "@codemirror/view";
 import { EditorState, Compartment, Prec } from "@codemirror/state";
-import { StreamLanguage, HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { StreamLanguage, HighlightStyle, syntaxHighlighting, indentUnit } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
 import { indentWithTab } from "@codemirror/commands";
 import { basicSetup } from "codemirror";
@@ -107,16 +107,18 @@ function setUpVimCommands() {
 }
 
 /**
- * options: { host, path, text, vim, onDirty(bool), onSave(), onClose() }
+ * options: { host, path, text, vim, tabSize, wordWrap, onDirty(bool), onSave(), onClose() }
  * returns { getText, markSaved, setVim, setTheme, insertText, goTo, focus, destroy }
  */
-export function createEditor({ host, path, text, vim: vimOn, onDirty, onSave, onClose }) {
+export function createEditor({ host, path, text, vim: vimOn, tabSize = 2, wordWrap = false, onDirty, onSave, onClose }) {
   setUpVimCommands();
   const crlf = text.includes("\r\n"); // keep Windows line endings the way they were
   const doc = crlf ? text.replace(/\r\n/g, "\n") : text;
   const langBox = new Compartment();
   const vimBox = new Compartment();
   const themeBox = new Compartment();
+  const layoutBox = new Compartment();
+  const layoutOptions = (size, wrap) => [EditorState.tabSize.of(size), indentUnit.of(" ".repeat(size)), wrap ? EditorView.lineWrapping : []];
   let saved = null; // the document as last saved, to tell if there is anything unsaved
 
   const view = new EditorView({
@@ -135,6 +137,7 @@ export function createEditor({ host, path, text, vim: vimOn, onDirty, onSave, on
         Prec.highest(keymap.of(["k", "l", "s", "d", "e", "t", "w", "f", "b"].map((k) => ({ key: `Mod-Shift-${k}`, run: () => true })))),
         langBox.of([]),
         themeBox.of(themeExtension(currentTheme())),
+        layoutBox.of(layoutOptions(tabSize, wordWrap)),
         EditorView.updateListener.of((u) => {
           if (u.docChanged) onDirty(!u.state.doc.eq(saved));
         }),
@@ -159,6 +162,9 @@ export function createEditor({ host, path, text, vim: vimOn, onDirty, onSave, on
     markSaved() {
       saved = view.state.doc;
       onDirty(false);
+    },
+    setLayout(size, wrap) {
+      view.dispatch({ effects: layoutBox.reconfigure(layoutOptions(size, wrap)) });
     },
     setTheme(theme) {
       view.dispatch({ effects: themeBox.reconfigure(themeExtension(theme)) });

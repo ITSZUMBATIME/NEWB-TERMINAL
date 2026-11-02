@@ -399,6 +399,7 @@ export function initRepos({ list, addBtn, refreshBtn, fillTree, dragger, home, t
         cfg.roots = cfg.roots.filter((r) => r !== root);
         save();
         scan();
+        rootsChanged();
       });
       line.append(del);
       box.append(line);
@@ -465,6 +466,7 @@ export function initRepos({ list, addBtn, refreshBtn, fillTree, dragger, home, t
         cfg.roots.push(path);
         save();
         scan();
+        rootsChanged();
       },
     });
     list.prepend(form);
@@ -482,7 +484,38 @@ export function initRepos({ list, addBtn, refreshBtn, fillTree, dragger, home, t
     if (isVisible()) refreshSummaries();
   });
 
+  const rootListeners = new Set();
+  const rootsChanged = () => rootListeners.forEach((fn) => fn());
+
   return {
+    /** The folders NEWB looks in for projects (used by Settings > Projects). */
+    roots: () => [...cfg.roots],
+    pretty,
+    subscribeRoots(fn) {
+      rootListeners.add(fn);
+      return () => rootListeners.delete(fn);
+    },
+    /** Add a folder. Resolves with an error message, or null if it worked. */
+    async addRoot(text) {
+      const path = expand(text.trim());
+      try {
+        await invoke("list_dir", { path, showHidden: false });
+      } catch (_) {
+        return "That folder doesn't exist.";
+      }
+      if (cfg.roots.includes(path)) return "That folder is already in the list.";
+      cfg.roots.push(path);
+      save();
+      scan();
+      rootsChanged();
+      return null;
+    },
+    removeRoot(path) {
+      cfg.roots = cfg.roots.filter((r) => r !== path);
+      save();
+      scan();
+      rootsChanged();
+    },
     /** The projects found so far (for the Search tab's "where to look" list). */
     list: () => repos.map((x) => ({ name: x.name, path: x.path })),
     /** Resolves once the first look for projects has finished. */

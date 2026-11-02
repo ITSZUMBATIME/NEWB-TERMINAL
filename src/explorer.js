@@ -9,6 +9,7 @@ import { el, askText, askChoice, showMenu } from "./ui.js";
 import { fileIcon } from "./icons.js";
 import { initRepos } from "./repos.js";
 import { initSearch } from "./search.js";
+import { prefs } from "./prefs.js";
 
 const KEY = "akin.explorer.v1";
 const MIN_W = 190;
@@ -399,6 +400,8 @@ export async function initExplorer({ dragger, getActiveTabId, getActiveFilePath,
   const viewEls = { files: byId("fx-view-files"), repos: byId("fx-view-repos"), search: byId("fx-view-search") };
   const viewTabs = [...root_.querySelectorAll("[data-fxview]")];
   function showView(name) {
+    // a tab that has been turned off in Settings is not an option
+    if ((name === "repos" && !prefs.get("showRepos")) || (name === "search" && !prefs.get("showSearch"))) name = "files";
     state.view = viewEls[name] ? name : "files";
     save();
     for (const [k, v] of Object.entries(viewEls)) v.hidden = k !== state.view;
@@ -407,9 +410,16 @@ export async function initExplorer({ dragger, getActiveTabId, getActiveFilePath,
     if (state.view === "search") repos.ready().then(() => search.show());
   }
   function showSearch() {
+    if (!prefs.get("showSearch")) {
+      toast("Search is turned off. You can turn it back on in Settings, under Panels.", 4000);
+      return;
+    }
     open();
     showView("search");
   }
+  prefs.subscribe((key) => {
+    if (key === "showRepos" || key === "showSearch") showView(state.view); // leave a tab that just went away
+  });
   for (const b of viewTabs) b.addEventListener("click", () => showView(b.dataset.fxview));
 
   dragger.attach(tree);
@@ -421,5 +431,5 @@ export async function initExplorer({ dragger, getActiveTabId, getActiveFilePath,
   showView(state.view);
   sync();
 
-  return { toggle, open, close, isOpen, refresh: render, sync, noteSaved: repos.noteSaved, showSearch };
+  return { toggle, open, close, isOpen, refresh: render, sync, noteSaved: repos.noteSaved, showSearch, repos };
 }

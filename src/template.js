@@ -8,6 +8,7 @@
 // The shell (bash, zsh...) only ever sees ordinary typing: we move its cursor with arrow
 // keys and delete the placeholder word with the Delete key. Nothing special is installed.
 import { UI } from "./theme.js";
+import { prefs } from "./prefs.js";
 
 const LEFT = "\x1b[D";
 const RIGHT = "\x1b[C";
@@ -45,7 +46,7 @@ export function cancelTemplate(tab) {
   }
   t.decos = [];
   tab.template = null;
-  tab.term.options.cursorStyle = "block"; // back to the normal cursor
+  tab.term.options.cursorStyle = prefs.get("cursorStyle"); // back to the cursor you chose
 }
 
 /**

@@ -1,7 +1,8 @@
 // The Settings tab (Ctrl+,). A list of sections on the left, a search box on top, and the
 // settings themselves in one scrolling page. Changes apply straight away and are remembered.
 
-import { el } from "./ui.js";
+import { el, askChoice } from "./ui.js";
+import { prefs } from "./prefs.js";
 import { icon } from "./icons.js";
 import { THEMES, currentTheme, onThemeChange, setTheme, setSync, themeState } from "./themes.js";
 
@@ -34,10 +35,10 @@ function toggle(on, onChange) {
 }
 
 /**
- * options: { host, display, toast }
+ * options: { host, display, toast, welcome, projects, version }
  * returns { show(sectionId), focus(), destroy() }
  */
-export function createSettingsView({ host, display, toast }) {
+export function createSettingsView({ host, display, toast, welcome, projects, version }) {
   const rows = []; // { section, el, text } for searching
   const sections = []; // { id, title, el, navEl }
 
@@ -183,6 +184,129 @@ export function createSettingsView({ host, display, toast }) {
   fontStep.append(fontMinus, fontVal, fontPlus);
   row(look, "Terminal text size", "The size of the letters in the terminal and the editor.", fontStep, "font letters bigger smaller");
 
+  /* ---------- Terminal ---------- */
+
+  const term = section("terminal", "Terminal");
+  const cursorSeg = choice(
+    [{ id: "block", label: "Block" }, { id: "bar", label: "Bar" }, { id: "underline", label: "Underline" }],
+    prefs.get("cursorStyle"),
+    (id) => prefs.set("cursorStyle", id),
+  );
+  row(term, "Cursor shape", "How the blinking marker where you type looks.", cursorSeg.el, "cursor block bar underline");
+  const blink = toggle(prefs.get("cursorBlink"), (v) => prefs.set("cursorBlink", v));
+  row(term, "Blinking cursor", "", blink.el, "cursor blink flash");
+  const historySeg = choice(
+    [1000, 5000, 10000, 50000].map((n) => ({ id: n, label: n.toLocaleString() })),
+    prefs.get("scrollback"),
+    (id) => prefs.set("scrollback", id),
+  );
+  row(term, "History", "How many lines you can scroll back through in each terminal.", historySeg.el, "scrollback lines scroll back memory");
+
+  /* ---------- Editor ---------- */
+
+  const edit = section("editor", "Editor");
+  const keysSeg = choice(
+    [{ id: "friendly", label: "Friendly" }, { id: "vim", label: "Vim" }],
+    display.state.editor,
+    (id) => display.setEditor(id),
+  );
+  row(edit, "Keys", "Friendly is normal typing. Vim is for people who already know Vim keys.", keysSeg.el, "vim keys keyboard editor");
+  const tabSeg = choice(
+    [2, 4, 8].map((n) => ({ id: n, label: String(n) })),
+    prefs.get("tabSize"),
+    (id) => prefs.set("tabSize", id),
+  );
+  row(edit, "Tab size", "How many spaces wide one indent is.", tabSeg.el, "tab indent spaces");
+  const wrap = toggle(prefs.get("wordWrap"), (v) => prefs.set("wordWrap", v));
+  row(edit, "Wrap long lines", "Show a long line on several rows instead of scrolling sideways.", wrap.el, "word wrap long lines");
+  const lines = toggle(prefs.get("lineNumbers"), (v) => prefs.set("lineNumbers", v));
+  row(edit, "Line numbers", "", lines.el, "line numbers gutter");
+
+  /* ---------- Panels ---------- */
+
+  const panels = section("panels", "Panels");
+  const showRepos = toggle(prefs.get("showRepos"), (v) => prefs.set("showRepos", v));
+  row(panels, "Show the Repos tab", "Turn this off if you don't use git.", showRepos.el, "repos git projects tab");
+  const showSearch = toggle(prefs.get("showSearch"), (v) => prefs.set("showSearch", v));
+  row(panels, "Show the Search tab", "Finds text inside your projects (Ctrl+Shift+F).", showSearch.el, "search find tab");
+
+  /* ---------- Welcome screen ---------- */
+
+  const hello = section("welcome", "Welcome screen");
+  const layoutSeg = choice(welcome.layouts(), welcome.layout(), (id) => welcome.setLayout(id));
+  row(hello, "Layout", "The logo and system info at the top of the terminal.", layoutSeg.el, "welcome header logo info text off");
+  const logoSeg = choice(welcome.logos(), welcome.logo(), (id) => welcome.setLogo(id));
+  row(hello, "Logo", "", logoSeg.el, "logo ascii code dot matrix shade");
+
+  /* ---------- Projects ---------- */
+
+  const proj = section("projects", "Projects");
+  const folders = el("div", "st-folders");
+  const addBox = el("form", "st-add");
+  const addInput = el("input", "st-input");
+  addInput.type = "text";
+  addInput.placeholder = "~/Projects";
+  addInput.spellcheck = false;
+  const addBtn = el("button", "st-btn", "Add");
+  addBtn.type = "submit";
+  addBox.append(addInput, addBtn);
+  addBox.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!addInput.value.trim() || !projects) return;
+    const problem = await projects.addRoot(addInput.value);
+    if (problem) toast(problem, 3000);
+    else addInput.value = "";
+  });
+  const foldersBox = el("div");
+  foldersBox.append(folders, addBox);
+  row(proj, "Folders to look in", "NEWB finds projects (folders with a .git folder) inside these. They appear in the Repos tab and the Search tab.", foldersBox, "projects folders repos git");
+
+  function showFolders() {
+    folders.replaceChildren();
+    for (const path of projects ? projects.roots() : []) {
+      const line = el("div", "st-folder");
+      const del = el("button");
+      del.type = "button";
+      del.title = "Stop looking here";
+      del.append(icon("close"));
+      del.addEventListener("click", () => projects.removeRoot(path));
+      line.append(el("span", "", projects.pretty(path)), del);
+      folders.append(line);
+    }
+    if (!folders.childElementCount) folders.append(el("div", "st-hint", "No folders yet."));
+  }
+  showFolders();
+  const unsubscribeRoots = projects?.subscribeRoots(showFolders);
+
+  /* ---------- About ---------- */
+
+  const about = section("about", "About");
+  row(about, `NEWB ${version ? `v${version}` : ""}`, "A terminal for people who are new to the terminal. Open source (MIT): github.com/ITSZUMBATIME/NEWB-TERMINAL", el("span"), "about version help");
+  const reset = el("button", "st-btn danger", "Reset all settings");
+  reset.type = "button";
+  reset.addEventListener("click", async () => {
+    const pick = await askChoice({
+      title: "Reset all settings?",
+      message: "Theme, size, text size, editor and panel choices all go back to how NEWB first looked. Your favourites, categories and files are not touched.",
+      choices: [
+        { id: "reset", label: "Reset", danger: true },
+        { id: "keep", label: "Keep my settings", primary: true, cancel: true },
+      ],
+    });
+    if (pick !== "reset") return;
+    setSync(false);
+    setTheme("newb-dark");
+    prefs.reset();
+    display.setScale(1, { quiet: true });
+    display.setFont(14);
+    display.setLook("classic");
+    display.setEditor("friendly");
+    welcome.setLayout("pinned");
+    welcome.setLogo("code");
+    toast("Settings reset.", 2500);
+  });
+  row(about, "Start over", "Puts every setting back to how it was.", reset, "reset defaults start over");
+
   /* ---------- Keeping the page in step ---------- */
 
   function refresh() {
@@ -192,10 +316,45 @@ export function createSettingsView({ host, display, toast }) {
     lookSeg.set(display.state.panels);
     sizeSeg.set(Math.round(display.state.scale * 100) / 100);
     fontVal.textContent = `${display.state.font} px`;
+    keysSeg.set(display.state.editor);
+    cursorSeg.set(prefs.get("cursorStyle"));
+    blink.set(prefs.get("cursorBlink"));
+    historySeg.set(prefs.get("scrollback"));
+    tabSeg.set(prefs.get("tabSize"));
+    wrap.set(prefs.get("wordWrap"));
+    lines.set(prefs.get("lineNumbers"));
+    showRepos.set(prefs.get("showRepos"));
+    showSearch.set(prefs.get("showSearch"));
+    layoutSeg.set(welcome.layout());
+    logoSeg.set(welcome.logo());
   }
   refresh();
   onThemeChange(refresh);
   const unsubscribe = display.subscribe(refresh);
+  const unsubscribePrefs = prefs.subscribe(refresh);
+  const unsubscribeWelcome = welcome.subscribe(refresh);
+
+  // Highlight the section you are looking at in the list on the left.
+  function markNav() {
+    let current = sections[0];
+    // While the tab is hidden everything measures zero, so keep the first section lit.
+    if (page.clientHeight > 0) {
+      const top = page.getBoundingClientRect().top + 40;
+      for (const sec of sections) if (!sec.el.hidden && sec.el.getBoundingClientRect().top <= top) current = sec;
+      // At the very bottom the last sections can never reach the top, so light the last one.
+      const atBottom = page.scrollTop + page.clientHeight >= page.scrollHeight - 2;
+      if (atBottom && page.scrollTop > 0) {
+        const shown = sections.filter((s) => !s.el.hidden);
+        current = shown[shown.length - 1] || current;
+      }
+    }
+    for (const sec of sections) sec.navEl.classList.toggle("on", sec === current);
+  }
+  page.addEventListener("scroll", markNav);
+  // Also re-check when the tab is shown (its size changes from nothing to something).
+  const resizer = new ResizeObserver(markNav);
+  resizer.observe(page);
+  markNav();
 
   return {
     show(id) {
@@ -204,7 +363,11 @@ export function createSettingsView({ host, display, toast }) {
     },
     focus: () => search.focus(),
     destroy() {
+      resizer.disconnect();
       unsubscribe();
+      unsubscribePrefs();
+      unsubscribeWelcome();
+      unsubscribeRoots?.();
       root.remove();
     },
   };
