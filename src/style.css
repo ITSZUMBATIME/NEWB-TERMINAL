@@ -371,10 +371,11 @@ body.dragging #logo-wrap { filter: none !important; animation: none !important; 
 .fx-row:hover .fx-cd { display: inline-block; }
 .fx-note { padding: 3px 8px 3px calc(28px + var(--d, 0) * 14px); font-size: 12px; font-style: italic; color: var(--muted); }
 
-.caret { flex: none; width: 10px; text-align: center; }
-.caret::before { content: "\25B8"; display: inline-block; font-size: 11px; color: var(--muted); transition: transform 0.12s; }
-.caret.none::before { content: ""; }
-.fx-row.open > .caret::before { transform: rotate(90deg); }
+.caret { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
+.caret::before { content: ""; width: 6px; height: 6px; margin-left: -2px; border-right: 1.7px solid #7d8591; border-bottom: 1.7px solid #7d8591; transform: rotate(-45deg); transition: transform 0.12s, border-color 0.12s; }
+.caret.none::before { display: none; }
+.fx-row:hover > .caret::before, .tn-head:hover .caret::before { border-color: var(--text); }
+.fx-row.open > .caret::before { transform: rotate(45deg); margin: -3px 0 0 0; }
 
 
 .fx-resize { position: absolute; top: 0; right: -3px; bottom: 0; width: 6px; cursor: col-resize; z-index: 3; }
@@ -394,7 +395,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 
 .tn-head { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 6px; cursor: pointer; user-select: none; -webkit-user-select: none; }
 .tn-head:hover { background: #171a1f; }
-.tn-branch:not(.closed) > .tn-head .caret::before { transform: rotate(90deg); }
+.tn-branch:not(.closed) > .tn-head .caret::before { transform: rotate(45deg); margin: -3px 0 0 0; }
 .tn-branch.top > .tn-head .tn-name { font-size: 11.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; }
 .tn-branch:not(.top) > .tn-head .tn-name { font-size: 13px; font-weight: 600; }
 .tn-head .tn-name { flex: 1; }
@@ -492,10 +493,10 @@ html[data-panels="terminal"] #new-tab,
 html[data-panels="terminal"] #toggle-info { border-radius: 0; }
 
 /* tree: + and - instead of arrows, dotted guide lines, commands shown with a $ */
-html[data-panels="terminal"] .caret::before { content: "+"; transform: none !important; color: #3fb950; font-size: 12px; }
+html[data-panels="terminal"] .caret::before { content: "+"; width: auto; height: auto; margin: 0 !important; border: none; transform: none !important; color: #3fb950; font-size: 12px; line-height: 1; }
 html[data-panels="terminal"] .tn-branch:not(.closed) > .tn-head .caret::before,
 html[data-panels="terminal"] .fx-row.open > .caret::before { content: "-"; }
-html[data-panels="terminal"] .caret.none::before { content: ""; }
+html[data-panels="terminal"] .caret.none::before { display: none; }
 html[data-panels="terminal"] .tn-kids { border-left: 1px dotted #2d5a37; }
 html[data-panels="terminal"] .tn-branch.top > .tn-head .tn-name { color: #3fb950; }
 html[data-panels="terminal"] .tn-head:hover,
@@ -543,7 +544,9 @@ html[data-panels="terminal"] .pop-val { color: #3fb950; }
 .link-btn { display: inline-flex; align-items: center; gap: 4px; }
 .link-btn .ico { width: 12px; height: 12px; }
 .link-btn.strong { color: var(--accent); }
-.star .ico, .unpin .ico { width: 14px; height: 14px; }
+.star, .unpin { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; margin: -5px -4px; padding: 0; border-radius: 6px; }
+.star:hover, .unpin:hover { background: #232830; }
+.star .ico, .unpin .ico { width: 18px; height: 18px; }
 .star.on .ico { fill: currentColor; }
 .tag { white-space: nowrap; }
 
@@ -650,11 +653,10 @@ html[data-panels="terminal"] .ctx button { border-radius: 0; }
 /* Shortcut list */
 .key-group { margin: 6px 0 12px 0; }
 .key-group h3 { margin: 12px 0 4px 0; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-.keys-row { display: flex; align-items: baseline; gap: 12px; padding: 5px 4px; border-radius: 6px; font-size: 12.5px; }
+.keys-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 4px; border-bottom: 1px solid #171a1f; font-size: 13px; }
 .keys-row:hover { background: #151820; }
-.keys-row .combo { flex: none; display: flex; flex-wrap: wrap; gap: 3px; min-width: 128px; }
-.keys-row .what { flex: 1; color: var(--muted); line-height: 1.4; }
-.keys-row .what b { color: var(--text); font-weight: 600; }
+.keys-row .what { flex: 1; min-width: 0; color: var(--text); line-height: 1.35; }
+.keys-row .combo { flex: none; display: flex; flex-wrap: nowrap; justify-content: flex-end; gap: 3px; }
 
 /* While dragging, the terminal, header and Files list ignore the mouse, so nothing reacts under the chip. */
 body.dragging .xterm, body.dragging #hero, body.dragging #explorer { pointer-events: none; }
@@ -666,10 +668,10 @@ body.dragging .xterm, body.dragging #hero, body.dragging #explorer { pointer-eve
 .tn-branch.cat-drop.drop-ready > .tn-head { background: rgba(78, 161, 255, 0.10); border-color: var(--accent); }
 .tn-branch.cat-drop.drop-ready > .tn-kids { background: rgba(78, 161, 255, 0.05); }
 .tn-branch.top.cat-drop { margin: 0; }
-.tn-head .mini-act, .tn-line .mini-act { display: inline-flex; align-items: center; justify-content: center; padding: 2px; border: none; border-radius: 4px; background: none; color: var(--muted); cursor: pointer; opacity: 0; transition: opacity 0.12s; }
+.tn-head .mini-act, .tn-line .mini-act { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; margin: -4px 0; padding: 0; border: none; border-radius: 5px; background: none; color: var(--muted); cursor: pointer; opacity: 0; transition: opacity 0.12s; }
 .tn-head:hover .mini-act, .tn-leaf:hover .mini-act, .mini-act:focus-visible { opacity: 1; }
 .mini-act:hover { color: var(--text); background: #232830; }
-.mini-act .ico { width: 13px; height: 13px; }
+.mini-act .ico { width: 16px; height: 16px; }
 .tn-head .mini-act .ico { color: inherit; }
 
 .add-row { display: flex; align-items: center; gap: 6px; width: 100%; margin: 3px 0 6px 0; padding: 6px 8px; border: 1px dashed #2c313a; border-radius: 6px; background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }

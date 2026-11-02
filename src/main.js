@@ -449,11 +449,7 @@ async function newTab() {
       explorerApi?.toggle();
       return false;
     }
-    if (k === "h") {
-      e.preventDefault();
-      aboutApi?.popover.toggle();
-      return false;
-    }
+    if (k === "i") return false; // not used by NEWB: nothing is typed into the shell either
     return true;
   });
 
@@ -517,10 +513,9 @@ async function start() {
     if (e.key === "Tab") {
       e.preventDefault();
       cycleTab(e.shiftKey ? -1 : 1);
-    } else if (e.shiftKey && "hwtel".includes(k) && k.length === 1) {
+    } else if (e.shiftKey && "wtel".includes(k) && k.length === 1) {
       e.preventDefault();
-      if (k === "h") aboutApi?.popover.toggle();
-      else if (k === "t") newTab();
+      if (k === "t") newTab();
       else if (k === "w") closeTab(activeId);
       else if (k === "e") explorerApi?.toggle();
       else if (k === "l") cycleLogo();

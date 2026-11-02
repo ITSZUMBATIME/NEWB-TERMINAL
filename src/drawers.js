@@ -653,7 +653,7 @@ export function initDrawers({ toast, focusTerminal, panesEl, dragger }) {
           if (i > 0 && r.keys.length > 1 && !k.includes(" ")) combo.append(el("span", "plus", "+"));
           combo.append(el("kbd", "", k));
         });
-        row.append(combo, el("span", "what", r.what));
+        row.append(el("span", "what", r.what), combo);
         sec.append(row);
       }
       keysBody.append(sec);

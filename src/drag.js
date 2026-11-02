@@ -10,7 +10,7 @@
 import { cmdElement, el } from "./ui.js";
 import { fileIcon } from "./icons.js";
 
-const START_DISTANCE = 3; // pixels you must move before a press counts as a drag
+const START_DISTANCE = 4; // pixels you must move before a press counts as a drag
 
 /**
  * options:
@@ -143,8 +143,6 @@ export function createDragger({ panesEl, onDrop, onStart, onEnd, onLeaveSource }
       onLeaveSource?.(drag.from);
     }
 
-    // Move the chip with the pointer straight away; the drop-target highlight can wait a frame.
-    drag.ghost.style.transform = `translate3d(${drag.x + 14}px, ${drag.y + 10}px, 0)`;
     if (!frame) frame = requestAnimationFrame(tick);
   }
 
