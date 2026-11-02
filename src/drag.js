@@ -2,18 +2,20 @@
 //
 // This uses plain mouse/pointer events instead of the browser's built-in drag and drop,
 // so it behaves the same everywhere and we control how smooth it is:
-//   - the floating "ghost" is moved once per screen refresh (not on every tiny mouse move)
-//   - heavy animations are paused while you drag (see onStart / onEnd)
-//   - a drawer you drag out of closes instantly, with no slide animation
+//   - the floating chip is moved once per screen refresh (not on every tiny mouse move)
+//   - where you are is worked out from a few saved rectangles, not by asking the page
+//   - the terminal and header ignore the mouse during a drag, so they don't do needless work
+//   - the logo animation is paused (see onStart / onEnd), and a drawer you drag out of closes instantly
 
-import { cmdElement, icon, el } from "./ui.js";
+import { cmdElement, el } from "./ui.js";
+import { fileIcon } from "./icons.js";
 
 const START_DISTANCE = 4; // pixels you must move before a press counts as a drag
 
 /**
  * options:
  *   panesEl                      the terminal area (a valid drop target)
- *   onDrop(payload, target)      target is "terminal" or "fav"
+ *   onDrop(payload, target)      target is { kind: "terminal" | "fav" | "cat", el }
  *   onStart(payload), onEnd()    hooks, e.g. to pause animations
  *   onLeaveSource(drawerEl)      the pointer moved out of the drawer the drag began in
  *
@@ -23,7 +25,8 @@ export function createDragger({ panesEl, onDrop, onStart, onEnd, onLeaveSource }
   let drag = null;
   let justDragged = false;
   let frame = 0;
-  let lastTarget = null;
+  let lastEl = null;
+  let rects = null;
 
   const SOURCE = "[data-cmd], [data-path]";
 
@@ -39,20 +42,42 @@ export function createDragger({ panesEl, onDrop, onStart, onEnd, onLeaveSource }
     };
   }
 
+  // Remember where things are once, at the start of the drag.
+  function measure() {
+    const visible = (node) => (node && node.offsetParent !== null ? node.getBoundingClientRect() : null);
+    rects = {
+      bar: document.getElementById("tabbar").getBoundingClientRect(),
+      panes: panesEl.getBoundingClientRect(),
+      explorer: visible(document.getElementById("explorer")),
+      drawer: document.querySelector(".drawer.open")?.getBoundingClientRect() ?? null,
+    };
+  }
+
+  const inside = (r, x, y) => r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+
   function targetAt(x, y, payload) {
-    const hit = document.elementFromPoint(x, y);
-    if (!hit) return null;
-    if (payload.kind === "cmd" && hit.closest(".fav-drop")) return "fav";
-    if (hit.closest(".drawer") || hit.closest("#tabbar") || hit.closest("#explorer")) return null;
-    if (hit.closest("#panes")) return "terminal";
+    if (inside(rects.bar, x, y)) return null;
+    if (inside(rects.drawer, x, y)) {
+      // Only here do we ask the page what is under the pointer: the drawer is small.
+      if (payload.kind !== "cmd") return null;
+      const hit = document.elementFromPoint(x, y);
+      const fav = hit?.closest(".fav-drop");
+      if (fav) return { kind: "fav", el: fav };
+      const cat = hit?.closest(".cat-drop");
+      if (cat) return { kind: "cat", el: cat };
+      return null;
+    }
+    if (inside(rects.explorer, x, y)) return null;
+    if (inside(rects.panes, x, y)) return { kind: "terminal", el: panesEl };
     return null;
   }
 
   function setHighlight(target) {
-    if (target === lastTarget) return;
-    lastTarget = target;
-    panesEl.classList.toggle("drop-ready", target === "terminal");
-    for (const f of document.querySelectorAll(".fav-drop")) f.classList.toggle("drop-ready", target === "fav");
+    const next = target?.el ?? null;
+    if (next === lastEl) return;
+    lastEl?.classList.remove("drop-ready");
+    next?.classList.add("drop-ready");
+    lastEl = next;
   }
 
   function cleanup() {
@@ -64,8 +89,8 @@ export function createDragger({ panesEl, onDrop, onStart, onEnd, onLeaveSource }
     const wasActive = drag?.active;
     document.body.classList.remove("dragging");
     setHighlight(null);
-    lastTarget = null;
     drag = null;
+    rects = null;
     if (wasActive) onEnd?.();
   }
 
@@ -83,7 +108,7 @@ export function createDragger({ panesEl, onDrop, onStart, onEnd, onLeaveSource }
       ghost.append(cmdElement(payload.cmd));
     } else {
       ghost.classList.add("path");
-      ghost.append(icon(payload.isDir ? "folder" : "file"), el("span", "ghost-name", payload.name));
+      ghost.append(fileIcon(payload.name, payload.isDir), el("span", "ghost-name", payload.name));
     }
     document.body.append(ghost);
     return ghost;
@@ -105,18 +130,17 @@ export function createDragger({ panesEl, onDrop, onStart, onEnd, onLeaveSource }
     if (!drag.active) {
       if (Math.hypot(drag.x - drag.x0, drag.y - drag.y0) < START_DISTANCE) return;
       drag.active = true;
+      measure();
       drag.ghost = makeGhost(drag.payload);
       document.body.classList.add("dragging");
       onStart?.(drag.payload);
     }
 
     // Left the drawer you picked this up from: tuck it away straight away.
-    if (drag.from && !drag.left) {
-      const r = drag.from.getBoundingClientRect();
-      if (drag.x < r.left || drag.x > r.right || drag.y < r.top || drag.y > r.bottom) {
-        drag.left = true;
-        onLeaveSource?.(drag.from);
-      }
+    if (drag.from && !drag.left && rects.drawer && !inside(rects.drawer, drag.x, drag.y)) {
+      drag.left = true;
+      rects.drawer = null; // it is closing, so it no longer counts as a place to drop
+      onLeaveSource?.(drag.from);
     }
 
     if (!frame) frame = requestAnimationFrame(tick);
@@ -137,7 +161,7 @@ export function createDragger({ panesEl, onDrop, onStart, onEnd, onLeaveSource }
   }
 
   function onDown(e) {
-    if (e.button !== 0 || e.target.closest("button, input")) return;
+    if (e.button !== 0 || e.target.closest("button, input, textarea")) return;
     const src = e.target.closest(SOURCE);
     if (!src) return;
     drag = {

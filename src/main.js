@@ -14,8 +14,11 @@ import { printBanner } from "./banner.js";
 import { initDrawers } from "./drawers.js";
 import { initExplorer } from "./explorer.js";
 import { initDisplay } from "./display.js";
+import { initAbout } from "./about.js";
+import { handleClipboardKey, initContextMenu } from "./clipboard.js";
+import { icon, mountIcons } from "./icons.js";
 import { createDragger } from "./drag.js";
-import { shellPath } from "./ui.js";
+import { shellPath, segmented } from "./ui.js";
 import { parseSpec, startTemplate, handleTemplateKey, cancelTemplate, fillBlank, refresh as refreshTemplate } from "./template.js";
 import { AsciiLogo, ASCII_STYLES } from "./asciilogo.js";
 
@@ -39,30 +42,30 @@ const toastEl = document.getElementById("logo-toast");
 const asciiLogo = new AsciiLogo(document.getElementById("ascii-logo"));
 
 let toastTimer = null;
-function toast(message) {
+function toast(message, ms = 3500) {
   toastEl.textContent = message;
   toastEl.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 3500);
+  toastTimer = setTimeout(() => toastEl.classList.remove("show"), ms);
 }
 
-// Logo styles. "plain" and "shimmer" are the traced shape; the others are drawn from characters.
+// Logo styles, all drawn from characters.
 const LOGOS = [
   { id: "code", name: "ASCII Code" },
   { id: "dots", name: "Dot Matrix" },
   { id: "shade", name: "ASCII Shade" },
-  { id: "plain", name: "Plain" },
-  { id: "shimmer", name: "Shimmer" },
-];
+].filter((l) => ASCII_STYLES.includes(l.id));
 let logoIndex = 0;
+let logoSeg = null;
 
 function setLogo(i, announce) {
   logoIndex = (i + LOGOS.length) % LOGOS.length;
   const logo = LOGOS[logoIndex];
   heroEl.dataset.logo = logo.id;
-  asciiLogo.setStyle(ASCII_STYLES.includes(logo.id) ? logo.id : null);
+  asciiLogo.setStyle(logo.id);
+  logoSeg?.set(logo.id);
   saveSetting("akin.logo.v2", logo.id);
-  if (announce) toast(`Logo style: ${logo.name} (${logoIndex + 1} of ${LOGOS.length}). Click the logo for the next one.`);
+  if (announce) toast(`Logo: ${logo.name}.`, 2000);
 }
 function textLogoStyle() {
   return LOGOS[logoIndex].id === "shade" ? "shade" : "code";
@@ -72,7 +75,7 @@ function cycleLogo() {
     // The printed banner can use the two character styles. New tabs pick up the change.
     const next = textLogoStyle() === "code" ? "shade" : "code";
     setLogo(LOGOS.findIndex((l) => l.id === next), false);
-    toast(`Logo style: ${LOGOS[logoIndex].name}. Open a new tab (Ctrl+Shift+T) to see it.`);
+    toast(`Logo: ${LOGOS[logoIndex].name}. Open a new tab (Ctrl+Shift+T) to see it.`);
     return;
   }
   setLogo(logoIndex + 1, true);
@@ -80,12 +83,13 @@ function cycleLogo() {
 
 // Layouts for the logo and system info.
 const LAYOUTS = [
-  { id: "pinned", name: "Header", hint: "animated logo and info sit above the terminal and scroll away as you work. Scroll up to bring them back." },
-  { id: "text", name: "Text", hint: "logo and info print at the top of each new tab as plain text. Press Ctrl+Shift+T to see it." },
+  { id: "pinned", name: "Header", hint: "the animated logo and info sit above the terminal and scroll away as you work." },
+  { id: "text", name: "Text", hint: "the logo and info print at the top of each new tab. Press Ctrl+Shift+T to see it." },
   { id: "logo", name: "Logo only", hint: "just the animated logo, above the terminal." },
   { id: "off", name: "Off", hint: "nothing extra, a plain terminal." },
 ];
 let layoutIndex = 0;
+let layoutSeg = null;
 let bannerShown = false;
 let infoModel = null;
 let infoPromise = null;
@@ -101,11 +105,9 @@ function setLayout(i, announce) {
   layoutIndex = (i + LAYOUTS.length) % LAYOUTS.length;
   const layout = LAYOUTS[layoutIndex];
   heroEl.dataset.layout = layout.id;
+  layoutSeg?.set(layout.id);
   saveSetting("akin.layout.v4", layout.id);
-  if (announce) toast(`Layout: ${layout.name} (${layoutIndex + 1} of ${LAYOUTS.length}): ${layout.hint}`);
-}
-function cycleLayout() {
-  setLayout(layoutIndex + 1, true);
+  if (announce) toast(`Welcome screen: ${layout.name}, ${layout.hint}`, 4500);
 }
 
 async function loadInfo() {
@@ -121,6 +123,7 @@ async function loadInfo() {
 /* ---------- Dropping commands into the terminal ---------- */
 
 let drawersApi = null;
+let aboutApi = null;
 let display = null;
 let explorerApi = null;
 let homeDir = "";
@@ -266,6 +269,13 @@ function fitAndResize(tab) {
   }
 }
 
+// Ctrl+Tab (dir = 1) and Ctrl+Shift+Tab (dir = -1) move between tabs.
+function cycleTab(dir) {
+  if (tabs.length < 2) return;
+  const i = tabs.findIndex((t) => t.id === activeId);
+  activate(tabs[(i + dir + tabs.length) % tabs.length].id);
+}
+
 function activate(id) {
   activeId = id;
   for (const t of tabs) {
@@ -302,7 +312,7 @@ async function newTab() {
   labelEl.textContent = `Terminal ${id}`;
   const closeEl = document.createElement("button");
   closeEl.className = "close";
-  closeEl.textContent = "×";
+  closeEl.append(icon("close"));
   closeEl.title = "Close tab (Ctrl+Shift+W)";
   tabEl.append(labelEl, closeEl);
   tabsEl.appendChild(tabEl);
@@ -354,6 +364,16 @@ async function newTab() {
   });
 
   term.attachCustomKeyEventHandler((e) => {
+    // Copy and paste first: Ctrl+C copies when text is selected, Ctrl+V pastes.
+    const clip = handleClipboardKey(e, term, toast);
+    if (clip === false) return false;
+
+    if (e.type === "keydown" && e.ctrlKey && !e.altKey && e.key === "Tab") {
+      e.preventDefault();
+      cycleTab(e.shiftKey ? -1 : 1);
+      return false;
+    }
+
     // Interface size: Ctrl +, Ctrl -, Ctrl 0
     if (e.type === "keydown" && e.ctrlKey && !e.altKey && display) {
       if (e.key === "=" || e.key === "+") {
@@ -384,12 +404,6 @@ async function newTab() {
       closeTab(id);
       return false;
     }
-    if (k === "c") {
-      e.preventDefault();
-      const sel = term.getSelection();
-      if (sel) navigator.clipboard?.writeText(sel).catch(() => {});
-      return false;
-    }
     if (k === "l") {
       e.preventDefault();
       cycleLogo();
@@ -397,12 +411,17 @@ async function newTab() {
     }
     if (k === "d") {
       e.preventDefault();
-      drawersApi?.open();
+      drawersApi?.open("tree");
       return false;
     }
     if (k === "s") {
       e.preventDefault();
-      drawersApi?.toggle();
+      drawersApi?.toggle("tree");
+      return false;
+    }
+    if (k === "k") {
+      e.preventDefault();
+      drawersApi?.toggle("keys");
       return false;
     }
     if (k === "e") {
@@ -412,11 +431,7 @@ async function newTab() {
     }
     if (k === "i") {
       e.preventDefault();
-      cycleLayout();
-      return false;
-    }
-    if (k === "v") {
-      // Let the browser paste normally; xterm picks it up.
+      aboutApi?.popover.toggle();
       return false;
     }
     return true;
@@ -475,10 +490,21 @@ async function start() {
       }
     },
   });
-  // Ctrl + / - / 0 and Ctrl + wheel when the keyboard or mouse is NOT on the terminal.
+  // Shortcuts when the keyboard is NOT on the terminal (the terminal has its own handler above).
   window.addEventListener("keydown", (e) => {
     if (e.target.closest?.(".xterm") || !e.ctrlKey || e.altKey) return;
-    if (e.key === "=" || e.key === "+") {
+    const k = e.key.toLowerCase();
+    if (e.key === "Tab") {
+      e.preventDefault();
+      cycleTab(e.shiftKey ? -1 : 1);
+    } else if (e.shiftKey && "iwtel".includes(k) && k.length === 1) {
+      e.preventDefault();
+      if (k === "i") aboutApi?.popover.toggle();
+      else if (k === "t") newTab();
+      else if (k === "w") closeTab(activeId);
+      else if (k === "e") explorerApi?.toggle();
+      else if (k === "l") cycleLogo();
+    } else if (e.key === "=" || e.key === "+") {
       e.preventDefault();
       display.stepScale(1);
     } else if (e.key === "-") {
@@ -502,11 +528,13 @@ async function start() {
   // One drag engine for both panels (commands and file paths).
   const dragger = createDragger({
     panesEl,
+    // `target` says where it landed: { kind: "terminal" | "fav" | "cat", el }.
     onDrop: (payload, target) => {
       if (payload.kind === "cmd") {
-        if (target === "terminal") insertCommand(payload.cmd, payload.risky);
-        else if (target === "fav") drawersApi?.addFav(payload.cmd);
-      } else if (target === "terminal") {
+        if (target.kind === "terminal") insertCommand(payload.cmd, payload.risky);
+        else if (target.kind === "fav") drawersApi?.addFav(payload.cmd);
+        else if (target.kind === "cat") drawersApi?.addToCategory(target.el.dataset.catid, payload.cmd);
+      } else if (target.kind === "terminal") {
         insertPath(payload.path);
       }
     },
@@ -516,11 +544,23 @@ async function start() {
   });
 
   drawersApi = initDrawers({
-    onInsert: insertCommand,
     toast,
     focusTerminal: () => activeTab()?.term.focus(),
     panesEl,
     dragger,
+  });
+  aboutApi = initAbout({
+    openCheats: () => drawersApi.open("tree"),
+    openKeys: () => drawersApi.open("keys"),
+  });
+  initContextMenu({
+    panesEl,
+    getTerm: () => activeTab()?.term,
+    send: (data) => {
+      const tab = activeTab();
+      if (tab) invoke("pty_write", { id: tab.id, data });
+    },
+    toast,
   });
   explorerApi = await initExplorer({
     dragger,
@@ -542,9 +582,21 @@ async function start() {
   newTabBtn.addEventListener("click", newTab);
   // After clicking a control, hand the keyboard back to the terminal so shortcuts keep working.
   const focusTerminal = () => activeTab()?.term.focus();
-  document.querySelector("#hero .logo").addEventListener("click", () => { cycleLogo(); focusTerminal(); });
   document.getElementById("ascii-logo").addEventListener("click", () => { cycleLogo(); focusTerminal(); });
-  document.getElementById("toggle-info").addEventListener("click", () => { cycleLayout(); focusTerminal(); });
+
+  // Welcome screen and logo choices live in the Display panel.
+  layoutSeg = segmented(
+    document.getElementById("seg-layout"),
+    LAYOUTS.map((l) => ({ id: l.id, label: l.name })),
+    (id) => setLayout(LAYOUTS.findIndex((l) => l.id === id), true),
+  );
+  logoSeg = segmented(
+    document.getElementById("seg-logo"),
+    LOGOS.map((l) => ({ id: l.id, label: l.name })),
+    (id) => setLogo(LOGOS.findIndex((l) => l.id === id), false),
+  );
+
+  mountIcons(); // fill in the little pictures on the buttons
 
   const savedLogo = LOGOS.findIndex((l) => l.id === loadSetting("akin.logo.v2"));
   setLogo(savedLogo === -1 ? 0 : savedLogo, false);

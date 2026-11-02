@@ -8,15 +8,20 @@ mod sysinfo;
 use std::{
     collections::HashMap,
     io::{Read, Write},
-    sync::Mutex,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex,
+    },
 };
 
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 /// One running shell (one per tab).
 struct Session {
+    /// Which launch of a shell this is. Lets a shell tell "I ended" apart from "I was replaced".
+    generation: u64,
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     child: Box<dyn Child + Send + Sync>,
@@ -28,6 +33,9 @@ struct Session {
 struct AppState {
     sessions: Mutex<HashMap<u32, Session>>,
 }
+
+/// Counts up with every shell started, so each one gets its own number.
+static NEXT_GENERATION: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Serialize)]
 struct OutputPayload {
@@ -73,6 +81,24 @@ fn pty_spawn(
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
 
+    // Register the shell first, so the reader below can tell whether it is still the current one.
+    // If this tab number was used before (for example after the window reloaded), the old
+    // shell is stopped quietly: it must not announce that "its" tab has ended.
+    let generation = NEXT_GENERATION.fetch_add(1, Ordering::Relaxed);
+    let old = state.sessions.lock().unwrap().insert(
+        id,
+        Session {
+            generation,
+            master: pair.master,
+            writer,
+            child,
+            pid,
+        },
+    );
+    if let Some(mut old) = old {
+        let _ = old.child.kill();
+    }
+
     // Background thread: read what the shell prints and send it to the window.
     std::thread::spawn(move || {
         let mut buf = [0u8; 8192];
@@ -101,18 +127,22 @@ fn pty_spawn(
                 }
             }
         }
-        let _ = app.emit("pty-exit", ExitPayload { id });
+        // Only announce the end if this shell is still the registered one for the tab.
+        // (A closed tab, or a shell that was replaced, has already been dealt with.)
+        let ended_by_itself = {
+            let state = app.state::<AppState>();
+            let mut sessions = state.sessions.lock().unwrap();
+            let current = sessions.get(&id).map(|s| s.generation) == Some(generation);
+            if current {
+                sessions.remove(&id);
+            }
+            current
+        };
+        if ended_by_itself {
+            let _ = app.emit("pty-exit", ExitPayload { id });
+        }
     });
 
-    state.sessions.lock().unwrap().insert(
-        id,
-        Session {
-            master: pair.master,
-            writer,
-            child,
-            pid,
-        },
-    );
     Ok(())
 }
 

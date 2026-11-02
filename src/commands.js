@@ -142,18 +142,75 @@ export const ESSENTIALS = [
   "clear",
 ];
 
-// Keys that help every beginner. These are tips, not commands to drop.
-export const KEYS = [
-  ["Ctrl+C", "Stop whatever is running"],
-  ["Tab", "Finish a file or command name for you"],
-  ["↑  ↓", "Step through commands you used before"],
-  ["Ctrl+R", "Search your past commands"],
-  ["Ctrl+L", "Clear the screen"],
-  ["Ctrl+A / Ctrl+E", "Jump to the start / end of the line"],
-  ["Ctrl+Shift+C / V", "Copy / paste"],
-  ["Ctrl+Shift+T / W", "New tab / close tab"],
-  ["Ctrl+Shift+D", "Open or close Discover"],
-  ["Ctrl+Shift+S", "Open or close this cheat sheet"],
+// Every shortcut, grouped. keys is shown as separate key caps. what is plain English.
+export const SHORTCUTS = [
+  {
+    name: "Copy and paste",
+    rows: [
+      { keys: ["Ctrl", "C"], what: "Copy the selected text. If nothing is selected, it stops the running command instead." },
+      { keys: ["Ctrl", "V"], what: "Paste." },
+      { keys: ["Ctrl", "Shift", "C"], what: "Always copy the selected text." },
+      { keys: ["Ctrl", "Shift", "V"], what: "Always paste." },
+      { keys: ["Right-click"], what: "A menu with Copy, Paste, Select all and Clear screen." },
+    ],
+  },
+  {
+    name: "Tabs",
+    rows: [
+      { keys: ["Ctrl", "Shift", "T"], what: "New tab." },
+      { keys: ["Ctrl", "Shift", "W"], what: "Close this tab." },
+      { keys: ["Ctrl", "Tab"], what: "Next tab." },
+      { keys: ["Ctrl", "Shift", "Tab"], what: "Previous tab." },
+    ],
+  },
+  {
+    name: "Panels",
+    rows: [
+      { keys: ["Ctrl", "Shift", "E"], what: "Show or hide Files on the left." },
+      { keys: ["Ctrl", "Shift", "S"], what: "Show or hide the cheat sheet." },
+      { keys: ["Ctrl", "Shift", "D"], what: "Open the cheat sheet with the search box ready." },
+      { keys: ["Ctrl", "Shift", "K"], what: "Show this list of shortcuts." },
+      { keys: ["Ctrl", "Shift", "I"], what: "About AKIN and getting started." },
+      { keys: ["Esc"], what: "Close the panel you're in." },
+    ],
+  },
+  {
+    name: "Size",
+    rows: [
+      { keys: ["Ctrl", "+"], what: "Make everything bigger." },
+      { keys: ["Ctrl", "-"], what: "Make everything smaller." },
+      { keys: ["Ctrl", "0"], what: "Back to normal size." },
+      { keys: ["Ctrl", "Mouse wheel"], what: "Bigger or smaller, smoothly." },
+    ],
+  },
+  {
+    name: "Filling in blanks",
+    rows: [
+      { keys: ["Tab"], what: "Jump to the next blue blank." },
+      { keys: ["Shift", "Tab"], what: "Jump back to the previous blank." },
+      { keys: ["Enter"], what: "Runs the command, but only once every blank is filled in." },
+      { keys: ["Arrow keys"], what: "Stop filling in blanks and edit the line yourself." },
+    ],
+  },
+  {
+    name: "Welcome screen",
+    rows: [
+      { keys: ["Ctrl", "Shift", "L"], what: "Try another logo style." },
+      { keys: ["Scroll up"], what: "Bring the header with the logo back into view." },
+    ],
+  },
+  {
+    name: "Terminal basics",
+    rows: [
+      { keys: ["Tab"], what: "Finish a file or command name for you." },
+      { keys: ["Up", "Down"], what: "Step through commands you used before." },
+      { keys: ["Ctrl", "R"], what: "Search your past commands." },
+      { keys: ["Ctrl", "L"], what: "Clear the screen." },
+      { keys: ["Ctrl", "A"], what: "Jump to the start of the line." },
+      { keys: ["Ctrl", "E"], what: "Jump to the end of the line." },
+      { keys: ["Ctrl", "U"], what: "Delete everything before the cursor." },
+    ],
+  },
 ];
 
 /** Find a catalog entry by its command text (or null). */

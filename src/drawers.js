@@ -1,15 +1,22 @@
-// The right-hand slide-over panel: your commands, in branching groups like folders in a
-// file explorer (Update > Application updates > Update Flatpak apps ...), plus your favourites.
-// The search box understands everyday words ("delete a file", "duplicate", "wifi").
+// The right-hand slide-over panel. It has two tabs:
+//   Cheat sheet  your commands, in branching groups like folders in a file explorer
+//                (Update > Application updates > Update Flatpak apps ...), your favourites,
+//                and your own categories. The search box understands everyday words.
+//   Shortcuts    every keyboard shortcut, in plain English.
 // Commands can be dragged onto the terminal. Dropping types the command for you to check;
-// it never presses Enter. Dropping onto "Favourites" pins it.
+// it never presses Enter. Dropping onto "Favourites" pins it, and onto one of your own
+// categories files it there.
 
-import { TREE, ESSENTIALS, KEYS, lookup, lookupTree, hintsFor, flattenTree } from "./commands.js";
+import { TREE, ESSENTIALS, SHORTCUTS, lookup, lookupTree, hintsFor, flattenTree } from "./commands.js";
 import { el, cmdElement } from "./ui.js";
+import { icon, groupIconName } from "./icons.js";
 
 const FAV_KEY = "akin.favs.v1";
 const OPEN_KEY = "akin.tree.v1";
+const TAB_KEY = "akin.rtab.v2";
+const CUSTOM_KEY = "akin.custom.v1";
 const FAV_ID = "Favourites";
+const MINE_ID = "My categories";
 
 function load(key, fallback) {
   try {
@@ -22,6 +29,7 @@ function load(key, fallback) {
 function save(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) { /* fine */ }
 }
+const uid = () => Math.random().toString(36).slice(2, 9);
 
 const infoFor = (cmd) => lookupTree(cmd) || lookup(cmd);
 
@@ -69,36 +77,61 @@ function queryWords(text) {
 }
 
 /**
- * options: { onInsert(cmd, risky), toast(msg), focusTerminal(), panesEl, dragger }
- * returns { toggle(), open(), close(), closeInstant(), isOpen(), addFav(cmd) }
+ * options: { toast(msg), focusTerminal(), panesEl, dragger }
+ * returns { toggle(tab), open(tab), close(), closeInstant(), isOpen(), addFav(cmd), addToCategory(id, cmd) }
  */
 export function initDrawers({ toast, focusTerminal, panesEl, dragger }) {
   const drawer = document.getElementById("drawer-cheats");
-  const button = document.getElementById("open-cheats");
+  const buttons = { tree: document.getElementById("open-cheats"), keys: document.getElementById("open-keys") };
+  const panels = { tree: document.getElementById("panel-tree"), keys: document.getElementById("panel-keys") };
+  const subtabs = [...drawer.querySelectorAll(".subtab")];
   const treeBody = document.getElementById("cheat-body");
+  const resultsBody = document.getElementById("cheat-results");
   const treeFilter = document.getElementById("tree-filter");
+  const keysFilter = document.getElementById("keys-filter");
+  const keysBody = document.getElementById("keys-body");
+  const tools = document.querySelector(".tree-tools");
 
   let favs = load(FAV_KEY, []).filter((x) => typeof x === "string");
-  let openIds = new Set(load(OPEN_KEY, [FAV_ID]));
+  let openIds = new Set(load(OPEN_KEY, [FAV_ID, MINE_ID]));
+  let custom = load(CUSTOM_KEY, []).filter((c) => c && typeof c.name === "string" && Array.isArray(c.items));
+  let tab = load(TAB_KEY, "tree");
+  if (!panels[tab]) tab = "tree";
 
-  /* ---------- Opening and closing ---------- */
+  /* ---------- Opening, closing, tabs ---------- */
 
   const isOpen = () => drawer.classList.contains("open");
 
-  function open() {
+  function updateButtons() {
+    for (const [name, b] of Object.entries(buttons)) b.classList.toggle("active", isOpen() && tab === name);
+  }
+
+  function showTab(name, focus) {
+    tab = name;
+    save(TAB_KEY, name);
+    for (const b of subtabs) b.classList.toggle("on", b.dataset.tab === name);
+    for (const [k, p] of Object.entries(panels)) p.hidden = k !== name;
+    updateButtons();
+    if (focus) {
+      const input = name === "keys" ? keysFilter : treeFilter;
+      setTimeout(() => {
+        input.focus();
+        input.select(); // typing replaces whatever you searched last time
+      }, 120);
+    }
+  }
+
+  // `focus: false` leaves the keyboard alone (used when a form is about to take it).
+  function open(name, { focus = true } = {}) {
     drawer.classList.add("open");
     drawer.setAttribute("aria-hidden", "false");
-    button.classList.add("active");
-    setTimeout(() => {
-      treeFilter.focus();
-      treeFilter.select(); // typing replaces whatever you searched last time
-    }, 120);
+    showTab(name && panels[name] ? name : tab, focus);
   }
   function close() {
     if (!isOpen()) return;
     drawer.classList.remove("open");
     drawer.setAttribute("aria-hidden", "true");
-    button.classList.remove("active");
+    updateButtons();
     if (drawer.contains(document.activeElement)) focusTerminal();
   }
   // Used while dragging out of the panel: no slide animation, so nothing lingers.
@@ -107,24 +140,33 @@ export function initDrawers({ toast, focusTerminal, panesEl, dragger }) {
     close();
     requestAnimationFrame(() => requestAnimationFrame(() => drawer.classList.remove("no-anim")));
   }
-  function toggle() {
-    if (isOpen()) close();
-    else open();
+  function toggle(name) {
+    if (isOpen() && (!name || name === tab)) close();
+    else open(name);
   }
 
-  button.addEventListener("click", toggle);
+  buttons.tree.addEventListener("click", () => toggle("tree"));
+  buttons.keys.addEventListener("click", () => toggle("keys"));
   drawer.querySelector(".drawer-close").addEventListener("click", close);
+  for (const b of subtabs) b.addEventListener("click", () => showTab(b.dataset.tab, true));
 
   // Shortcuts when the keyboard is NOT in the terminal (the terminal has its own handler).
   window.addEventListener("keydown", (e) => {
-    if (e.target.closest?.(".xterm")) return;
-    const k = e.key.toLowerCase();
-    if (e.ctrlKey && e.shiftKey && (k === "s" || k === "d")) {
-      e.preventDefault();
-      if (k === "d") open();
-      else toggle();
-    } else if (e.key === "Escape" && drawer.contains(e.target)) {
+    if (e.key === "Escape" && drawer.contains(e.target) && !e.target.closest?.(".mini-form")) {
       close();
+      return;
+    }
+    if (e.target.closest?.(".xterm") || !e.ctrlKey || !e.shiftKey) return;
+    const k = e.key.toLowerCase();
+    if (k === "s") {
+      e.preventDefault();
+      toggle("tree");
+    } else if (k === "d") {
+      e.preventDefault();
+      open("tree");
+    } else if (k === "k") {
+      e.preventDefault();
+      toggle("keys");
     }
   });
 
@@ -157,15 +199,14 @@ export function initDrawers({ toast, focusTerminal, panesEl, dragger }) {
 
   function refreshStars() {
     for (const star of drawer.querySelectorAll(".star")) {
-      const on = isFav(star.closest("[data-cmd]").dataset.cmd);
-      star.textContent = on ? "★" : "☆";
-      star.classList.toggle("on", on);
+      star.classList.toggle("on", isFav(star.closest("[data-cmd]").dataset.cmd));
     }
   }
 
   function starButton(cmd) {
     const star = el("button", "star");
     star.title = "Add to your favourites";
+    star.append(icon("star"));
     star.addEventListener("click", (e) => {
       e.stopPropagation();
       toggleFav(cmd);
@@ -173,43 +214,57 @@ export function initDrawers({ toast, focusTerminal, panesEl, dragger }) {
     return star;
   }
 
-  /* ---------- The tree ---------- */
+  function iconButton(name, title, className, onClick) {
+    const b = el("button", className);
+    b.type = "button";
+    b.title = title;
+    b.append(icon(name));
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      onClick();
+    });
+    return b;
+  }
 
-  function leaf(item, depth, { removable = false } = {}) {
+  /* ---------- Rows and groups ---------- */
+
+  /**
+   * One command. `opts.removable` shows a remove button (favourites).
+   * `opts.mine` ({ cat, item }) shows edit and delete buttons (your own commands).
+   */
+  function leaf(item, depth, opts = {}) {
     const row = el("div", "tn-leaf");
     row.dataset.cmd = item.cmd;
     if (item.risky) row.dataset.risky = "1";
     const name = item.name || item.title || item.cmd;
-    // Everything a person might type to find this: its name, the command, the explanation,
-    // the groups it sits in, and the everyday wording from the old Discover list.
-    row.dataset.search = `${name} ${item.cmd} ${item.why || ""} ${(item.trail || []).join(" ")} ${hintsFor(item.cmd)}`.toLowerCase();
     row.style.setProperty("--d", depth);
 
     const line = el("div", "tn-line");
     line.append(el("span", "tn-name", name));
     if (item.risky) line.append(el("span", "tag", "careful"));
-    if (removable) {
-      const x = el("button", "unpin", "×");
-      x.title = "Remove from favourites";
-      x.addEventListener("click", (e) => {
-        e.stopPropagation();
-        toggleFav(item.cmd);
-      });
-      line.append(x);
-    } else {
-      line.append(starButton(item.cmd));
+    if (opts.mine) {
+      line.append(
+        iconButton("edit", "Edit this command", "mini-act", () => editMine(opts.mine.cat, opts.mine.item, row)),
+        iconButton("trash", "Delete this command", "mini-act", () => deleteMine(opts.mine.cat, opts.mine.item)),
+      );
     }
+    if (opts.removable) line.append(iconButton("close", "Remove from favourites", "unpin", () => toggleFav(item.cmd)));
+    else line.append(starButton(item.cmd));
+
     row.append(line, cmdElement(item.cmd));
     if (item.why) row.append(el("div", "tn-why", item.why));
     return row;
   }
 
-  function branch(id, name, depth, kidsBuilder, { count, extraClass } = {}) {
+  function branch(id, name, depth, kidsBuilder, { count, extraClass, iconName, actions } = {}) {
     const wrap = el("div", `tn-branch${extraClass ? " " + extraClass : ""}`);
     wrap.dataset.id = id;
     wrap.style.setProperty("--d", depth);
     const head = el("div", "tn-head");
-    head.append(el("span", "caret"), el("span", "tn-name", name));
+    head.append(el("span", "caret"));
+    if (iconName) head.append(icon(iconName));
+    head.append(el("span", "tn-name", name));
+    if (actions) head.append(...actions);
     if (count !== undefined) head.append(el("span", "tn-count", String(count)));
     const kids = el("div", "tn-kids");
     kidsBuilder(kids);
@@ -225,9 +280,7 @@ export function initDrawers({ toast, focusTerminal, panesEl, dragger }) {
     return wrap;
   }
 
-  function countLeaves(node) {
-    return node.children.reduce((n, ch) => n + (ch.children ? countLeaves(ch) : 1), 0);
-  }
+  const countLeaves = (node) => node.children.reduce((n, ch) => n + (ch.children ? countLeaves(ch) : 1), 0);
 
   function groupNode(node, depth, trail) {
     const id = [...trail, node.name].join(" > ");
@@ -236,7 +289,7 @@ export function initDrawers({ toast, focusTerminal, panesEl, dragger }) {
         if (child.children) kids.append(groupNode(child, depth + 1, [...trail, node.name]));
         else kids.append(leaf({ ...child, trail: [...trail, node.name] }, depth + 1));
       }
-    }, { count: countLeaves(node) });
+    }, { count: countLeaves(node), iconName: depth === 0 ? groupIconName(node.name) : null });
   }
 
   function renderFavs() {
@@ -245,10 +298,7 @@ export function initDrawers({ toast, focusTerminal, panesEl, dragger }) {
     const kids = node.querySelector(".tn-kids");
     kids.replaceChildren();
     if (favs.length) {
-      for (const cmd of favs) {
-        const info = infoFor(cmd) || { name: cmd, cmd };
-        kids.append(leaf({ ...info, cmd }, 1, { removable: true }));
-      }
+      for (const cmd of favs) kids.append(leaf({ ...(infoFor(cmd) || { name: cmd }), cmd }, 1, { removable: true }));
     } else {
       kids.append(el("div", "empty", "Star a command, or drag one here, to keep it handy."));
     }
@@ -256,16 +306,240 @@ export function initDrawers({ toast, focusTerminal, panesEl, dragger }) {
     if (treeFilter.value.trim()) applyFilter();
   }
 
+  /* ---------- Your own categories ---------- */
+
+  const saveCustom = () => save(CUSTOM_KEY, custom);
+  const totalMine = () => custom.reduce((n, c) => n + c.items.length, 0);
+
+  /** A small form for a name or a command. Returns the form element. */
+  function miniForm({ fields, submitLabel, onSave, onCancel, hint }) {
+    const form = el("form", "mini-form");
+    const inputs = fields.map((f) => {
+      const label = el("label", "mini-field");
+      label.append(el("span", "", f.label));
+      const input = el("input");
+      input.type = "text";
+      input.placeholder = f.placeholder || "";
+      input.value = f.value || "";
+      input.spellcheck = false;
+      input.autocomplete = "off";
+      label.append(input);
+      form.append(label);
+      return { f, input };
+    });
+    if (hint) form.append(el("div", "mini-hint", hint));
+    const error = el("div", "mini-error");
+    error.hidden = true;
+    const row = el("div", "mini-buttons");
+    const ok = el("button", "mini-save", submitLabel);
+    ok.type = "submit";
+    const cancel = el("button", "mini-cancel", "Cancel");
+    cancel.type = "button";
+    cancel.addEventListener("click", onCancel);
+    row.append(ok, cancel);
+    form.append(error, row);
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const values = {};
+      for (const { f, input } of inputs) values[f.key] = input.value.trim();
+      const missing = inputs.find(({ f, input }) => f.required && !input.value.trim());
+      if (missing) {
+        error.textContent = `Please fill in: ${missing.f.label}`;
+        error.hidden = false;
+        missing.input.focus();
+        return;
+      }
+      onSave(values);
+    });
+    form.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onCancel();
+      }
+    });
+    // the drag engine and panel shortcuts shouldn't hijack typing in here
+    form.addEventListener("pointerdown", (e) => e.stopPropagation());
+    form.focusFirst = () => inputs[0].input.focus();
+    return form;
+  }
+
+  const commandFields = (item = {}) => [
+    { key: "name", label: "Name", placeholder: "e.g. Update my game", value: item.name, required: true },
+    { key: "cmd", label: "Command", placeholder: "e.g. cp {{file}} {{to}}", value: item.cmd, required: true },
+    { key: "why", label: "Description (optional)", placeholder: "What does it do?", value: item.why },
+  ];
+  const BLANK_HINT = "Put {{name}} where you want a blank to fill in later, like  cp {{file}} {{to}}.";
+
+  function addMine(cat, kidsEl, beforeEl) {
+    const form = miniForm({
+      fields: commandFields(),
+      submitLabel: "Add command",
+      hint: BLANK_HINT,
+      onCancel: () => form.remove(),
+      onSave: (v) => {
+        cat.items.push({ id: uid(), name: v.name, cmd: v.cmd, why: v.why });
+        saveCustom();
+        renderMine();
+        toast(`Added to "${cat.name}".`);
+      },
+    });
+    kidsEl.insertBefore(form, beforeEl || null);
+    form.focusFirst();
+  }
+
+  function editMine(cat, item, rowEl) {
+    const form = miniForm({
+      fields: commandFields(item),
+      submitLabel: "Save",
+      hint: BLANK_HINT,
+      onCancel: () => form.replaceWith(rowEl),
+      onSave: (v) => {
+        Object.assign(item, { name: v.name, cmd: v.cmd, why: v.why });
+        saveCustom();
+        renderMine();
+      },
+    });
+    rowEl.replaceWith(form);
+    form.focusFirst();
+  }
+
+  function deleteMine(cat, item) {
+    cat.items = cat.items.filter((i) => i.id !== item.id);
+    saveCustom();
+    renderMine();
+    toast("Deleted.", 1800);
+  }
+
+  function renameCategory(cat, headEl) {
+    const form = miniForm({
+      fields: [{ key: "name", label: "Category name", value: cat.name, required: true }],
+      submitLabel: "Save",
+      onCancel: () => renderMine(),
+      onSave: (v) => {
+        cat.name = v.name;
+        saveCustom();
+        renderMine();
+      },
+    });
+    headEl.replaceWith(form);
+    form.focusFirst();
+  }
+
+  function deleteCategory(cat) {
+    if (cat.items.length && !window.confirm(`Delete "${cat.name}" and its ${cat.items.length} command${cat.items.length === 1 ? "" : "s"}?`)) return;
+    custom = custom.filter((c) => c.id !== cat.id);
+    saveCustom();
+    renderMine();
+  }
+
+  function mineNode() {
+    const kidsBuilder = (kids) => {
+      if (!custom.length) {
+        kids.append(el("div", "empty", "Make your own groups of commands. Press New category above, then drag commands in, or add your own."));
+      }
+      for (const cat of custom) {
+        const node = branch(`my:${cat.id}`, cat.name, 1, (ck) => {
+          for (const item of cat.items) ck.append(leaf({ ...item, trail: [MINE_ID, cat.name] }, 2, { mine: { cat, item } }));
+          const add = el("button", "add-row");
+          add.type = "button";
+          add.append(icon("plus"), el("span", "", "Add a command"));
+          add.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (!ck.querySelector(".mini-form")) addMine(cat, ck, add);
+          });
+          ck.append(add);
+        }, {
+          count: cat.items.length,
+          extraClass: "cat-drop",
+          iconName: "folder",
+          actions: [],
+        });
+        node.dataset.catid = cat.id;
+        const head = node.querySelector(".tn-head");
+        head.querySelector(".tn-name").after(
+          iconButton("edit", "Rename this category", "mini-act", () => renameCategory(cat, head)),
+          iconButton("trash", "Delete this category", "mini-act", () => deleteCategory(cat)),
+        );
+        kids.append(node);
+      }
+    };
+    return branch(MINE_ID, "My categories", 0, kidsBuilder, { count: totalMine(), extraClass: "top", iconName: "mine" });
+  }
+
+  /** Rebuild just the "My categories" section, then the search index. */
+  function renderMine() {
+    const old = treeBody.querySelector(`.tn-branch[data-id="${MINE_ID}"]`);
+    const fresh = mineNode();
+    fresh.classList.add("top");
+    if (old) old.replaceWith(fresh);
+    refreshStars();
+    if (treeFilter.value.trim()) applyFilter();
+  }
+
+  function startNewCategory() {
+    open("tree", { focus: false });
+    treeFilter.value = "";
+    applyFilter();
+    openIds.add(MINE_ID);
+    save(OPEN_KEY, [...openIds]);
+    renderMine();
+    const node = treeBody.querySelector(`.tn-branch[data-id="${MINE_ID}"]`);
+    node.classList.remove("closed");
+    const kids = node.querySelector(":scope > .tn-kids");
+    kids.querySelector(".mini-form")?.remove();
+    const form = miniForm({
+      fields: [{ key: "name", label: "Name of your new category", placeholder: "e.g. My game, Work, Server", required: true }],
+      submitLabel: "Create",
+      onCancel: () => form.remove(),
+      onSave: (v) => {
+        const cat = { id: uid(), name: v.name, items: [] };
+        custom.push(cat);
+        saveCustom();
+        openIds.add(`my:${cat.id}`);
+        save(OPEN_KEY, [...openIds]);
+        renderMine();
+        toast(`Made "${cat.name}". Drag commands into it, or press Add a command.`);
+      },
+    });
+    kids.prepend(form);
+    node.scrollIntoView({ block: "nearest" });
+    form.focusFirst();
+  }
+
+  /** Copy a command into one of your own categories (from dragging). */
+  function addToCategory(catId, cmd) {
+    const cat = custom.find((c) => c.id === catId);
+    if (!cat) return;
+    if (cat.items.some((i) => i.cmd === cmd)) {
+      toast(`"${cat.name}" already has that one.`);
+      return;
+    }
+    const info = infoFor(cmd);
+    cat.items.push({ id: uid(), name: info?.name || info?.title || cmd, cmd, why: info?.why || "" });
+    saveCustom();
+    openIds.add(`my:${cat.id}`);
+    renderMine();
+    toast(`Added to "${cat.name}".`);
+  }
+
+  document.getElementById("tree-add").addEventListener("click", startNewCategory);
+
+  /* ---------- The whole tree ---------- */
+
   function renderTree() {
     treeBody.replaceChildren();
 
-    treeBody.append(branch(FAV_ID, "★ Favourites", 0, () => {}, { count: favs.length, extraClass: "fav-drop top" }));
+    treeBody.append(branch(FAV_ID, FAV_ID, 0, () => {}, { count: favs.length, extraClass: "fav-drop top", iconName: "star" }));
     renderFavs();
+
+    const mine = mineNode();
+    mine.classList.add("top");
+    treeBody.append(mine);
 
     treeBody.append(
       branch("Essentials", "Essentials", 0, (kids) => {
         for (const cmd of ESSENTIALS) kids.append(leaf(infoFor(cmd) || { name: cmd, cmd }, 1));
-      }, { count: ESSENTIALS.length, extraClass: "top" }),
+      }, { count: ESSENTIALS.length, extraClass: "top", iconName: "bolt" }),
     );
 
     for (const group of TREE) {
@@ -273,31 +547,30 @@ export function initDrawers({ toast, focusTerminal, panesEl, dragger }) {
       node.classList.add("top");
       treeBody.append(node);
     }
-
-    treeBody.append(
-      branch("Handy keys", "Handy keys", 0, (kids) => {
-        for (const [k, what] of KEYS) {
-          const r = el("div", "key-row");
-          r.append(el("kbd", "", k), el("span", "tn-why", what));
-          kids.append(r);
-        }
-      }, { count: KEYS.length, extraClass: "top" }),
-    );
-
     refreshStars();
   }
 
-  // Search: a ranked list. Exact matches come first, then ones that only match by similar words
-  // ("delete" also finds "remove"). Each result shows the group it lives in.
-  const resultsBody = document.getElementById("cheat-results");
-  const tools = document.querySelector(".tree-tools");
-  const allLeaves = flattenTree().map((item) => ({
+  /* ---------- Search ---------- */
+
+  const treeLeaves = flattenTree().map((item) => ({
     item,
     hay: `${item.name} ${item.cmd} ${item.why || ""} ${item.trail.join(" ")} ${hintsFor(item.cmd)}`.toLowerCase(),
     nameHay: `${item.name} ${hintsFor(item.cmd)}`.toLowerCase(),
   }));
   const MAX_RESULTS = 40;
 
+  function allLeaves() {
+    const mine = custom.flatMap((cat) =>
+      cat.items.map((item) => {
+        const full = { ...item, trail: [MINE_ID, cat.name] };
+        return { item: full, hay: `${item.name} ${item.cmd} ${item.why || ""} ${cat.name} my`.toLowerCase(), nameHay: item.name.toLowerCase() };
+      }),
+    );
+    return [...mine, ...treeLeaves];
+  }
+
+  // A ranked list. Exact matches come first, then ones that only match by similar words
+  // ("delete" also finds "remove"). Each result shows the group it lives in.
   function applyFilter() {
     const text = treeFilter.value.trim();
     const words = text ? queryWords(text) : [];
@@ -307,19 +580,20 @@ export function initDrawers({ toast, focusTerminal, panesEl, dragger }) {
     tools.hidden = searching;
     if (!searching) return;
 
-    const scored = [];
-    for (const entry of allLeaves) {
+    const leaves = allLeaves();
+    let scored = [];
+    for (const entry of leaves) {
       let score = 0;
       if (matchesExactly(entry.hay, words)) score = matchesExactly(entry.nameHay, words) ? 4 : 3; // in the name counts most
       else if (matchesLoosely(entry.hay, words)) score = matchesLoosely(entry.nameHay, words) ? 2 : 1;
       if (score) scored.push({ ...entry, score });
     }
-    scored.sort((x, y) => y.score - x.score); // stable: ties keep their order in the tree
+    scored.sort((x, y) => y.score - x.score); // stable: ties keep their order
 
     // Nothing matched every word? Offer the commands that match the most words.
     let closest = false;
     if (!scored.length) {
-      for (const entry of allLeaves) {
+      for (const entry of leaves) {
         const n = words.filter((w) => matchesLoosely(entry.hay, [w])).length;
         if (n) scored.push({ ...entry, score: n });
       }
@@ -357,11 +631,44 @@ export function initDrawers({ toast, focusTerminal, panesEl, dragger }) {
     save(OPEN_KEY, [...openIds]);
   });
 
+  /* ---------- Shortcuts tab ---------- */
+
+  function renderKeys() {
+    const words = keysFilter.value.toLowerCase().split(/\s+/).filter(Boolean);
+    keysBody.replaceChildren();
+    let any = false;
+    for (const group of SHORTCUTS) {
+      const rows = group.rows.filter((r) => {
+        const hay = `${group.name} ${r.keys.join(" ")} ${r.what}`.toLowerCase();
+        return words.every((w) => hay.includes(w));
+      });
+      if (!rows.length) continue;
+      any = true;
+      const sec = el("section", "key-group");
+      sec.append(el("h3", "", group.name));
+      for (const r of rows) {
+        const row = el("div", "keys-row");
+        const combo = el("span", "combo");
+        r.keys.forEach((k, i) => {
+          if (i > 0 && r.keys.length > 1 && !k.includes(" ")) combo.append(el("span", "plus", "+"));
+          combo.append(el("kbd", "", k));
+        });
+        row.append(combo, el("span", "what", r.what));
+        sec.append(row);
+      }
+      keysBody.append(sec);
+    }
+    if (!any) keysBody.append(el("div", "empty", "No shortcut matches. Try \"copy\", \"tab\" or \"size\"."));
+  }
+  keysFilter.addEventListener("input", renderKeys);
+
   /* ---------- Go ---------- */
 
   dragger.attach(treeBody);
   dragger.attach(resultsBody);
   renderTree();
+  renderKeys();
+  showTab(tab, false);
 
-  return { toggle, open, close, closeInstant, isOpen, addFav };
+  return { toggle, open, close, closeInstant, isOpen, addFav, addToCategory, startNewCategory };
 }

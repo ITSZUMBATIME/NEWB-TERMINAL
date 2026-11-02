@@ -5,7 +5,8 @@
 // By default it follows the folder your terminal is in.
 
 import { invoke } from "@tauri-apps/api/core";
-import { el, icon } from "./ui.js";
+import { el } from "./ui.js";
+import { fileIcon } from "./icons.js";
 
 const KEY = "akin.explorer.v1";
 const MIN_W = 190;
@@ -120,7 +121,7 @@ export async function initExplorer({ dragger, getActiveTabId, onCd, toast }) {
     row.classList.toggle("hidden-file", entry.hidden);
     row.classList.toggle("link", entry.is_link);
 
-    row.append(el("span", `caret${entry.is_dir ? "" : " none"}`), icon(entry.is_dir ? "folder" : "file"), el("span", "fx-name", entry.name));
+    row.append(el("span", `caret${entry.is_dir ? "" : " none"}`), fileIcon(entry.name, entry.is_dir, entry.is_link), el("span", "fx-name", entry.name));
 
     if (entry.is_dir) {
       const cd = el("button", "fx-cd", "cd");

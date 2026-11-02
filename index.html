@@ -8,17 +8,17 @@
   <body>
     <div id="app">
       <div id="tabbar">
-        <button id="open-files" class="bar-btn" title="Files (Ctrl+Shift+E)">&#9703; Files</button>
+        <button id="open-files" class="bar-btn" data-icon="files" title="Files (Ctrl+Shift+E)"><span>Files</span></button>
         <div id="tabs"></div>
-        <button id="new-tab" title="New tab (Ctrl+Shift+T)">+</button>
-        <button id="open-cheats" class="bar-btn" title="Cheat sheet (Ctrl+Shift+S)">Cheat sheet &#9704;</button>
-        <button id="open-display" class="bar-btn" title="Display: size and style (Ctrl + / Ctrl -)">Aa</button>
-        <button id="toggle-info" title="Change the system info layout (Ctrl+Shift+I)">&#9432;</button>
+        <button id="new-tab" data-icon="plus" title="New tab (Ctrl+Shift+T)" aria-label="New tab"></button>
+        <button id="open-cheats" class="bar-btn" data-icon="commands" title="Cheat sheet (Ctrl+Shift+S)"><span>Cheat sheet</span></button>
+        <button id="open-keys" class="bar-btn" data-icon="keyboard" title="Shortcuts (Ctrl+Shift+K)"><span>Shortcuts</span></button>
+        <button id="open-display" class="bar-btn icon-only" data-icon="display" title="Display: size and looks" aria-label="Display"></button>
+        <button id="open-info" class="bar-btn icon-only" data-icon="info" title="About and help (Ctrl+Shift+I)" aria-label="About and help"></button>
       </div>
 
       <div id="hero" data-logo="code" data-layout="pinned">
         <div id="logo-wrap">
-          <div class="logo" role="img" aria-label="AKIN" title="Click to try another logo style"></div>
           <canvas id="ascii-logo" title="Click to try another logo style"></canvas>
         </div>
         <div id="info">
@@ -37,12 +37,12 @@
         <!-- Left: file explorer. Docked, so it pushes the terminal across. -->
         <aside id="explorer" aria-label="Files" aria-hidden="false">
           <div class="fx-head">
-            <button id="fx-home" class="fx-btn" title="Home folder">&#8962;</button>
-            <button id="fx-up" class="fx-btn" title="Up one folder">&#8593;</button>
+            <button id="fx-home" class="fx-btn" data-icon="home" title="Home folder" aria-label="Home folder"></button>
+            <button id="fx-up" class="fx-btn" data-icon="up" title="Up one folder" aria-label="Up one folder"></button>
             <div id="fx-path" class="fx-path"></div>
-            <button id="fx-follow" class="fx-btn" title="Follow the folder the terminal is in">&#9678;</button>
-            <button id="fx-hidden" class="fx-btn" title="Show hidden files">&#9680;</button>
-            <button id="fx-refresh" class="fx-btn" title="Refresh">&#8635;</button>
+            <button id="fx-follow" class="fx-btn" data-icon="follow" title="Follow the folder the terminal is in" aria-label="Follow the terminal"></button>
+            <button id="fx-hidden" class="fx-btn" data-icon="eye" title="Show hidden files" aria-label="Show hidden files"></button>
+            <button id="fx-refresh" class="fx-btn" data-icon="refresh" title="Refresh" aria-label="Refresh"></button>
           </div>
           <div id="fx-tree" class="fx-tree"></div>
           <div id="fx-resize" class="fx-resize" title="Drag to resize"></div>
@@ -52,54 +52,105 @@
 
       <div id="logo-toast"></div>
 
-      <!-- Right: slide-over panel with all your commands -->
-      <aside id="drawer-cheats" class="drawer right" aria-hidden="true" aria-label="Commands">
-        <header><h2>Commands</h2><button class="drawer-close" title="Close (Esc)">&times;</button></header>
+      <!-- Right: slide-over panel. Two tabs: the cheat sheet and the shortcut list. -->
+      <aside id="drawer-cheats" class="drawer right" aria-hidden="true" aria-label="Commands and shortcuts">
+        <header>
+          <h2>Commands</h2>
+          <button class="drawer-close" data-icon="close" title="Close (Esc)" aria-label="Close"></button>
+        </header>
+        <nav class="subtabs">
+          <button class="subtab on" data-tab="tree">Cheat sheet</button>
+          <button class="subtab" data-tab="keys">Shortcuts</button>
+        </nav>
+
         <div id="panel-tree" class="panel">
           <input id="tree-filter" class="panel-input" type="search" placeholder="What do you want to do? e.g. copy a file" autocomplete="off" spellcheck="false">
           <div class="tree-tools">
             <button id="tree-expand" class="link-btn">Expand all</button>
             <button id="tree-collapse" class="link-btn">Collapse all</button>
+            <button id="tree-add" class="link-btn strong" data-icon="plus" title="Make your own category of commands"><span>New category</span></button>
           </div>
           <div id="cheat-body" class="drawer-body"></div>
           <div id="cheat-results" class="drawer-body" hidden></div>
         </div>
+
+        <div id="panel-keys" class="panel" hidden>
+          <input id="keys-filter" class="panel-input" type="search" placeholder="Search shortcuts, e.g. copy" autocomplete="off" spellcheck="false">
+          <div id="keys-body" class="drawer-body"></div>
+        </div>
       </aside>
 
-      <!-- Display settings: how big things are, and how the panels look -->
+      <!-- Display: how big things are, and how AKIN looks. No sliders, just a few clear choices. -->
       <div id="display-pop" class="popover" hidden>
         <h3>Display</h3>
 
-        <div class="pop-row">
-          <label for="scale-range">Interface size</label>
-          <span id="scale-val" class="pop-val">100%</span>
-        </div>
-        <div class="slider-row">
-          <button id="scale-down" class="step-btn" title="Smaller (Ctrl -)">&minus;</button>
-          <input id="scale-range" type="range" min="60" max="300" step="5" value="100">
-          <button id="scale-up" class="step-btn" title="Bigger (Ctrl +)">+</button>
-        </div>
-        <p class="pop-hint">Makes everything bigger or smaller: buttons, icons, panels and text. Ctrl + and Ctrl - do the same.</p>
-
-        <div class="pop-row">
-          <label for="font-range">Terminal text</label>
-          <span id="font-val" class="pop-val">14 px</span>
-        </div>
-        <div class="slider-row">
-          <button id="font-down" class="step-btn" title="Smaller text">&minus;</button>
-          <input id="font-range" type="range" min="9" max="32" step="1" value="14">
-          <button id="font-up" class="step-btn" title="Bigger text">+</button>
+        <div class="field">
+          <div class="field-head"><span>Size</span><span id="scale-val" class="pop-val">100%</span></div>
+          <div class="stepper">
+            <button id="scale-down" class="step-btn" title="Smaller (Ctrl -)" aria-label="Smaller">&minus;</button>
+            <div id="scale-chips" class="chips"></div>
+            <button id="scale-up" class="step-btn" title="Bigger (Ctrl +)" aria-label="Bigger">+</button>
+          </div>
+          <p class="pop-hint">Makes everything bigger or smaller: icons, panels, text. Ctrl + and Ctrl - do the same.</p>
         </div>
 
-        <div class="pop-row"><label>Panel style</label></div>
-        <div id="panel-style" class="seg">
-          <button data-style="classic">Classic</button>
-          <button data-style="flat">Flat</button>
-          <button data-style="terminal">Terminal</button>
+        <div class="field">
+          <div class="field-head"><span>Terminal text</span><span id="font-val" class="pop-val">14 px</span></div>
+          <div class="stepper">
+            <button id="font-down" class="step-btn" title="Smaller text" aria-label="Smaller text">&minus;</button>
+            <div class="stepper-fill"></div>
+            <button id="font-up" class="step-btn" title="Bigger text" aria-label="Bigger text">+</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><span>Look</span></div>
+          <div id="panel-style" class="seg">
+            <button data-style="classic">Classic</button>
+            <button data-style="flat">Flat</button>
+            <button data-style="terminal">Terminal</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><span>Welcome screen</span></div>
+          <div id="seg-layout" class="seg"></div>
+        </div>
+
+        <div class="field">
+          <div class="field-head"><span>Logo</span></div>
+          <div id="seg-logo" class="seg"></div>
         </div>
 
         <button id="display-reset" class="link-btn">Reset to defaults</button>
       </div>
+
+      <!-- About and help -->
+      <div id="info-pop" class="popover wide" hidden>
+        <div class="about-head">
+          <div class="about-name">AKIN <span id="about-ver" class="about-ver"></span></div>
+          <div class="about-tag">A terminal for people who are new to the terminal.</div>
+        </div>
+
+        <h4>Getting started</h4>
+        <ul class="tips">
+          <li><b>Drag a command</b> from the Cheat sheet into the terminal. AKIN types it for you and waits. You press Enter when you're happy with it.</li>
+          <li><b>Blue blanks</b> are for you to fill in. Just type. <kbd>Tab</kbd> jumps to the next blank.</li>
+          <li><b>Drag a file or folder</b> from Files into the terminal to type its name, or onto a blank to fill it.</li>
+          <li><b>Search in plain English</b> in the cheat sheet, like "delete a file" or "wifi".</li>
+          <li><kbd>Ctrl</kbd>+<kbd>C</kbd> copies when text is selected, and stops a running command when it isn't. <kbd>Ctrl</kbd>+<kbd>V</kbd> pastes.</li>
+          <li>Make everything bigger or smaller with <kbd>Ctrl</kbd>+<kbd>+</kbd> and <kbd>Ctrl</kbd>+<kbd>-</kbd>. The <b>Display</b> button has more.</li>
+        </ul>
+
+        <div class="about-actions">
+          <button id="about-cheats" class="link-btn strong">Open the cheat sheet</button>
+          <button id="about-keys" class="link-btn strong">See all shortcuts</button>
+        </div>
+        <p class="about-foot">Open source (MIT). github.com/ITSZUMBATIME/NEWB-TERMINAL</p>
+      </div>
+
+      <!-- Right-click menu for the terminal -->
+      <div id="ctx-menu" class="ctx" hidden></div>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

@@ -29,24 +29,6 @@ export function cmdElement(cmd) {
   return code;
 }
 
-const SVG = "http://www.w3.org/2000/svg";
-
-/** A small folder or file icon. */
-export function icon(kind) {
-  const svg = document.createElementNS(SVG, "svg");
-  svg.setAttribute("viewBox", "0 0 16 16");
-  svg.setAttribute("class", `ico ico-${kind}`);
-  svg.setAttribute("aria-hidden", "true");
-  const path = document.createElementNS(SVG, "path");
-  if (kind === "folder") {
-    path.setAttribute("d", "M1.5 3.5A1 1 0 0 1 2.5 2.5h3.6l1.4 1.6h6a1 1 0 0 1 1 1v7.4a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z");
-  } else {
-    path.setAttribute("d", "M3.5 1.5h5.6l3.4 3.4v9a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-11.4a1 1 0 0 1 1-1zM9 1.7v3.6h3.5");
-  }
-  svg.append(path);
-  return svg;
-}
-
 /** Quote text so the shell reads it as one word (only when it needs quoting). */
 export function shellQuote(s) {
   return /^[A-Za-z0-9_@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`;
@@ -67,4 +49,59 @@ export function shellPath(path, home, cwd) {
   if (home && path === home) return "~";
   if (home && path.startsWith(home + "/")) return "~/" + shellQuote(path.slice(home.length + 1));
   return shellQuote(path);
+}
+
+/**
+ * A row of buttons where one is chosen (like Classic / Flat / Terminal).
+ * `items` is [{ id, label }]. Returns { set(id) } to change which is highlighted.
+ */
+export function segmented(container, items, onPick) {
+  container.replaceChildren();
+  const buttons = new Map();
+  for (const item of items) {
+    const b = el("button", "", item.label);
+    b.type = "button";
+    b.dataset.id = item.id;
+    b.addEventListener("click", () => onPick(item.id));
+    container.append(b);
+    buttons.set(item.id, b);
+  }
+  return {
+    set(id) {
+      for (const [k, b] of buttons) b.classList.toggle("on", k === id);
+    },
+  };
+}
+
+// Only one popover is open at a time.
+const popovers = [];
+
+/** Open and close a popover from its button; clicking elsewhere or pressing Esc closes it. */
+export function makePopover(pop, button, { onOpen } = {}) {
+  const api = {
+    isOpen: () => !pop.hidden,
+    open() {
+      for (const p of popovers) if (p !== api) p.close();
+      pop.hidden = false;
+      button.classList.add("active");
+      onOpen?.();
+    },
+    close() {
+      pop.hidden = true;
+      button.classList.remove("active");
+    },
+    toggle() {
+      if (api.isOpen()) api.close();
+      else api.open();
+    },
+  };
+  button.addEventListener("click", () => api.toggle());
+  window.addEventListener("pointerdown", (e) => {
+    if (api.isOpen() && !pop.contains(e.target) && !button.contains(e.target)) api.close();
+  });
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && api.isOpen()) api.close();
+  });
+  popovers.push(api);
+  return api;
 }
