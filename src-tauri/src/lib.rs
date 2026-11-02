@@ -201,6 +201,20 @@ fn pty_cwd(state: State<AppState>, id: u32) -> Result<String, String> {
         .map_err(|e| e.to_string())
 }
 
+/// Is something other than the shell itself holding the keyboard right now? (A command is running,
+/// or the shell is off looking something up, like Fedora's "command not found" search.) NEWB uses
+/// this to wait before it types a command for you, so its typing doesn't land in the middle of that.
+#[tauri::command]
+fn pty_busy(state: State<AppState>, id: u32) -> bool {
+    let sessions = state.sessions.lock().unwrap();
+    let Some(session) = sessions.get(&id) else { return false };
+    match (session.master.process_group_leader(), session.pid) {
+        // The shell leads its own group. While it is waiting at the prompt it owns the terminal.
+        (Some(front), Some(shell)) => front as u32 != shell,
+        _ => false,
+    }
+}
+
 /// Quit the whole app (used when the last tab closes).
 #[tauri::command]
 fn quit_app(app: AppHandle) {
@@ -218,6 +232,7 @@ pub fn run() {
             pty_kill,
             quit_app,
             pty_cwd,
+            pty_busy,
             fsinfo::list_dir,
             fsinfo::home_dir,
             repo::read_text_file,

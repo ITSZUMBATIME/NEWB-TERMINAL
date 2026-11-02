@@ -158,8 +158,29 @@ const templateIO = (tab) => ({
   toast,
 });
 
+// Before NEWB types something for you, wait (briefly) until the shell is back at its prompt.
+// If a command is still running, or the shell is off searching for a "command not found" hint
+// (Fedora does this and redraws the line while it works), typing now would be echoed in the middle
+// of that and come out garbled. If it is still busy after a couple of seconds we type anyway,
+// because the program that is running may be waiting for it.
+async function waitForPrompt(tab, maxMs = 2500) {
+  const started = performance.now();
+  let told = false;
+  for (;;) {
+    let busy = false;
+    try { busy = await invoke("pty_busy", { id: tab.id }); } catch (_) { return; }
+    if (!busy) return;
+    if (performance.now() - started > maxMs) return;
+    if (!told && performance.now() - started > 600) {
+      told = true;
+      toast("Waiting for the terminal to finish…", 2500);
+    }
+    await new Promise((r) => setTimeout(r, 60));
+  }
+}
+
 // Type a command at the prompt (never presses Enter). Commands with blanks start the fill-in session.
-function insertCommand(cmd, risky) {
+async function insertCommand(cmd, risky) {
   const tab = activeTab();
   if (!tab) return;
   if (!isTerm(tab)) {
@@ -167,6 +188,7 @@ function insertCommand(cmd, risky) {
     return;
   }
   if (!tab.opened) return;
+  await waitForPrompt(tab);
   startTemplate(tab, parseSpec(cmd), templateIO(tab));
   keepCursorInView(tab);
   tab.term.focus();
@@ -174,9 +196,10 @@ function insertCommand(cmd, risky) {
 }
 
 // Type plain text (like "cd ~/Projects") at the prompt. Never presses Enter.
-function typeText(text) {
+async function typeText(text) {
   const tab = terminalForAction();
   if (!tab || !tab.opened) return;
+  await waitForPrompt(tab);
   startTemplate(tab, { text, blanks: [] }, templateIO(tab));
   keepCursorInView(tab);
   tab.term.focus();
@@ -203,6 +226,7 @@ async function insertPath(path) {
   if (!tab.opened) return;
   const text = shellPath(path, homeDir, await cwdOf(tab));
   const io = templateIO(tab);
+  if (!tab.template) await waitForPrompt(tab); // (while filling in blanks the shell is already waiting for you)
   if (!fillBlank(tab, text, io)) io.send(text + " ");
   keepCursorInView(tab);
   tab.term.focus();
