@@ -29,6 +29,8 @@ import { initCustomThemes } from "./customthemes.js";
 import { initLogo } from "./logo.js";
 import { initTour } from "./tour.js";
 import { initThemePicker } from "./themepicker.js";
+import { initAi } from "./ai.js";
+import { TOOL_NAMES } from "./ailevels.js";
 
 initThemes(); // colours first, so nothing flashes the wrong theme
 
@@ -154,6 +156,7 @@ let customThemes = null;
 let logoApi = null;
 let tourApi = null;
 let themePicker = null;
+let aiApi = null;
 let explorerApi = null;
 let homeDir = "";
 
@@ -357,7 +360,7 @@ function activeTab() {
 }
 
 function fitAndResize(tab) {
-  if (!isTerm(tab)) return;
+  if (!tab?.term) return; // (the AI chat tab has a terminal too)
   try {
     tab.fit.fit();
     invoke("pty_resize", { id: tab.id, cols: tab.term.cols, rows: tab.term.rows });
@@ -397,6 +400,7 @@ function layoutPanes() {
     if (split && visible) t.pane.dataset.side = isTerm(t) ? "left" : "right";
     else delete t.pane.dataset.side;
     t.tabEl.classList.toggle("shown", split && visible && t !== active);
+    if (visible && t.kind === "ai" && t.opened) requestAnimationFrame(() => fitAndResize(t));
   }
   const termVisible = term && (split || active === term);
   if (termVisible) {
@@ -435,6 +439,112 @@ function activate(id) {
   } else {
     tab.editor.focus();
   }
+}
+
+// Keys that NEWB handles itself in a terminal (copy and paste, tabs, panels, shortcuts). Returns the
+// function xterm asks for each key: false means NEWB took it, true means pass it on to the shell.
+function termKeyHandler(term, id) {
+  return (e) => {
+    // Copy and paste first: Ctrl+C copies when text is selected, Ctrl+V pastes.
+    const clip = handleClipboardKey(e, term, toast);
+    if (clip === false) return false;
+
+    if (e.type === "keydown" && e.ctrlKey && !e.altKey && e.key === "Tab") {
+      e.preventDefault();
+      cycleTab(e.shiftKey ? -1 : 1);
+      return false;
+    }
+
+    if (e.type === "keydown" && e.ctrlKey && !e.altKey && !e.shiftKey && e.key === ",") {
+      e.preventDefault();
+      openSettings();
+      return false;
+    }
+
+    // Interface size: Ctrl +, Ctrl -, Ctrl 0
+    if (e.type === "keydown" && e.ctrlKey && !e.altKey && display) {
+      if (e.key === "=" || e.key === "+") {
+        e.preventDefault();
+        display.stepScale(1);
+        return false;
+      }
+      if (e.key === "-") {
+        e.preventDefault();
+        display.stepScale(-1);
+        return false;
+      }
+      if (e.key === "0" && !e.shiftKey) {
+        e.preventDefault();
+        display.resetScale();
+        return false;
+      }
+    }
+    // Ctrl+Space: the quick Ask bar (only when the AI helpers are on).
+    if (e.type === "keydown" && e.ctrlKey && !e.altKey && !e.shiftKey && e.code === "Space" && aiApi?.enabled()) {
+      e.preventDefault();
+      aiApi.openAsk();
+      return false;
+    }
+    if (e.type !== "keydown" || !e.ctrlKey || !e.shiftKey) return true;
+    const k = e.key.toLowerCase();
+    if (k === "t") {
+      e.preventDefault();
+      newTab();
+      return false;
+    }
+    if (k === "w") {
+      e.preventDefault();
+      closeTab(id);
+      return false;
+    }
+    if (k === "l") {
+      e.preventDefault();
+      cycleLogo();
+      return false;
+    }
+    if (k === "d") {
+      e.preventDefault();
+      drawersApi?.open("tree");
+      return false;
+    }
+    if (k === "s") {
+      e.preventDefault();
+      drawersApi?.toggle("tree");
+      return false;
+    }
+    if (k === "k") {
+      e.preventDefault();
+      drawersApi?.toggle("keys");
+      return false;
+    }
+    if (k === "e") {
+      e.preventDefault();
+      explorerApi?.toggle();
+      return false;
+    }
+    if (k === "f") {
+      e.preventDefault();
+      explorerApi?.showSearch();
+      return false;
+    }
+    if (k === "b") {
+      e.preventDefault();
+      toggleSplit();
+      return false;
+    }
+    if (k === "p") {
+      e.preventDefault();
+      themePicker?.open();
+      return false;
+    }
+    if (k === "a" && aiApi?.enabled()) {
+      e.preventDefault();
+      aiApi.startChat();
+      return false;
+    }
+    if (k === "i") return false; // not used by NEWB: nothing is typed into the shell either
+    return true;
+    };
 }
 
 async function newTab() {
@@ -506,96 +616,7 @@ async function newTab() {
     if (title) labelEl.textContent = title;
   });
 
-  term.attachCustomKeyEventHandler((e) => {
-    // Copy and paste first: Ctrl+C copies when text is selected, Ctrl+V pastes.
-    const clip = handleClipboardKey(e, term, toast);
-    if (clip === false) return false;
-
-    if (e.type === "keydown" && e.ctrlKey && !e.altKey && e.key === "Tab") {
-      e.preventDefault();
-      cycleTab(e.shiftKey ? -1 : 1);
-      return false;
-    }
-
-    if (e.type === "keydown" && e.ctrlKey && !e.altKey && !e.shiftKey && e.key === ",") {
-      e.preventDefault();
-      openSettings();
-      return false;
-    }
-
-    // Interface size: Ctrl +, Ctrl -, Ctrl 0
-    if (e.type === "keydown" && e.ctrlKey && !e.altKey && display) {
-      if (e.key === "=" || e.key === "+") {
-        e.preventDefault();
-        display.stepScale(1);
-        return false;
-      }
-      if (e.key === "-") {
-        e.preventDefault();
-        display.stepScale(-1);
-        return false;
-      }
-      if (e.key === "0" && !e.shiftKey) {
-        e.preventDefault();
-        display.resetScale();
-        return false;
-      }
-    }
-    if (e.type !== "keydown" || !e.ctrlKey || !e.shiftKey) return true;
-    const k = e.key.toLowerCase();
-    if (k === "t") {
-      e.preventDefault();
-      newTab();
-      return false;
-    }
-    if (k === "w") {
-      e.preventDefault();
-      closeTab(id);
-      return false;
-    }
-    if (k === "l") {
-      e.preventDefault();
-      cycleLogo();
-      return false;
-    }
-    if (k === "d") {
-      e.preventDefault();
-      drawersApi?.open("tree");
-      return false;
-    }
-    if (k === "s") {
-      e.preventDefault();
-      drawersApi?.toggle("tree");
-      return false;
-    }
-    if (k === "k") {
-      e.preventDefault();
-      drawersApi?.toggle("keys");
-      return false;
-    }
-    if (k === "e") {
-      e.preventDefault();
-      explorerApi?.toggle();
-      return false;
-    }
-    if (k === "f") {
-      e.preventDefault();
-      explorerApi?.showSearch();
-      return false;
-    }
-    if (k === "b") {
-      e.preventDefault();
-      toggleSplit();
-      return false;
-    }
-    if (k === "p") {
-      e.preventDefault();
-      themePicker?.open();
-      return false;
-    }
-    if (k === "i") return false; // not used by NEWB: nothing is typed into the shell either
-    return true;
-  });
+  term.attachCustomKeyEventHandler(termKeyHandler(term, id));
 
   // Text layout: print the logo and system info at the top of the tab, above the prompt.
   if (heroEl.dataset.layout === "text") {
@@ -729,6 +750,8 @@ function openSettings(sectionId) {
     version: pkg.version,
     themes: customThemes,
     logo: logoApi,
+    ai: aiApi,
+    openAiChat: () => aiApi?.startChat(),
     showThemesFolder: () => {
       const folder = customThemes?.dir();
       if (folder) typeText(`cd ${shellPath(folder, homeDir)}`);
@@ -750,6 +773,87 @@ function openSettings(sectionId) {
   });
   activate(id);
   if (sectionId) view.show(sectionId);
+}
+
+// The AI chat: Claude Code or Codex running in a tab of its own, started in your folder with the
+// permission level you picked. It sits on the "editor" side, so with the split on it shows beside
+// your terminal. Like the Settings tab it borrows the editor tab's plumbing (a small stand-in "editor").
+async function openAiTab({ tool, name, args, cwd, label }) {
+  const existing = tabs.find((t) => t.kind === "ai");
+  if (existing) {
+    activate(existing.id);
+    toast("The AI chat is already open. Close it (Ctrl+Shift+W) to start again with new settings.", 4000);
+    return;
+  }
+  const id = nextId++;
+  const pane = document.createElement("div");
+  pane.className = "pane";
+  panesEl.appendChild(pane);
+  const holder = document.createElement("div");
+  holder.className = "term-holder ai-holder";
+  pane.appendChild(holder);
+
+  const tabEl = document.createElement("div");
+  tabEl.className = "tab editor-tab ai-tab";
+  const labelEl = el("span", "label", label);
+  const closeEl = document.createElement("button");
+  closeEl.className = "close";
+  closeEl.append(icon("close"));
+  closeEl.title = "Close tab (Ctrl+Shift+W)";
+  tabEl.append(icon("spark"), labelEl, closeEl);
+  tabsEl.appendChild(tabEl);
+
+  const term = new Terminal({
+    fontFamily: '"JetBrainsMono Nerd Font", "JetBrains Mono", "DejaVu Sans Mono", monospace',
+    fontSize: display ? display.state.font : 14,
+    cursorBlink: prefs.get("cursorBlink"),
+    cursorStyle: prefs.get("cursorStyle"),
+    scrollback: prefs.get("scrollback"),
+    theme: { ...THEME },
+    allowProposedApi: true,
+  });
+  const fit = new FitAddon();
+  term.loadAddon(fit);
+
+  const tab = {
+    id, kind: "ai", term, fit, pane, holder, s: 0, tabEl, labelEl, opened: false, path: null, dirty: false, tool,
+    editor: {
+      focus: () => term.focus(),
+      insertText: (text) => invoke("pty_write", { id, data: text }),
+      goTo() {}, setVim() {}, setLayout() {}, getText: () => "", markSaved() {},
+      setTheme: () => { term.options.theme = { ...THEME }; },
+      destroy() {
+        invoke("pty_kill", { id }).catch(() => {});
+        try { term.dispose(); } catch (_) { /* already gone */ }
+      },
+    },
+  };
+  tabs.push(tab);
+  tabEl.addEventListener("click", () => activate(id));
+  closeEl.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeTab(id);
+  });
+
+  activate(id);
+  if (!splitOn && tabs.some((t) => isTerm(t))) toggleSplit(); // beside the terminal, where you can see both
+  term.open(holder);
+  tab.opened = true;
+  fit.fit();
+  term.onData((data) => invoke("pty_write", { id, data }));
+  term.onTitleChange((title) => { if (title) labelEl.textContent = `${title.slice(0, 28)}`; });
+  term.attachCustomKeyEventHandler(termKeyHandler(term, id));
+  new ResizeObserver(() => { if (tab.opened && pane.classList.contains("active")) fitAndResize(tab); }).observe(holder);
+
+  try {
+    await invoke("pty_spawn", { id, cols: term.cols, rows: term.rows, tool, args, cwd });
+    toast(`${name} started in ${cwd ? cwd.replace(homeDir, "~") : "your home folder"}.`, 3500);
+  } catch (err) {
+    toast(`Couldn't start ${name}: ${err}`, 6000);
+    closeTab(id, true);
+    return;
+  }
+  term.focus();
 }
 
 // Ask what to do with unsaved changes. Returns true if the tab may close.
@@ -849,7 +953,7 @@ async function start() {
     toast,
     onFontChange: (px) => {
       for (const t of tabs) {
-        if (!isTerm(t)) continue; // editors follow the --term-font size on their own
+        if (!t.term) continue; // editors follow the --term-font size on their own
         t.term.options.fontSize = px;
         if (t.opened) fitAndResize(t);
       }
@@ -880,7 +984,7 @@ async function start() {
   }, true);
   prefs.subscribe((key, value) => {
     for (const t of tabs) {
-      if (isTerm(t)) {
+      if (t.term) {
         if (key === "cursorStyle" && !t.template) t.term.options.cursorStyle = value;
         if (key === "cursorBlink") t.term.options.cursorBlink = value;
         if (key === "scrollback") t.term.options.scrollback = value;
@@ -900,6 +1004,12 @@ async function start() {
     if (e.key === "Tab") {
       e.preventDefault();
       cycleTab(e.shiftKey ? -1 : 1);
+    } else if (e.code === "Space" && !e.shiftKey && aiApi?.enabled()) {
+      e.preventDefault();
+      aiApi.openAsk();
+    } else if (e.shiftKey && k === "a" && aiApi?.enabled()) {
+      e.preventDefault();
+      aiApi.startChat();
     } else if (e.shiftKey && "wtelfbp".includes(k) && k.length === 1) {
       e.preventDefault();
       if (k === "t") newTab();
@@ -956,11 +1066,25 @@ async function start() {
     onLeaveSource: () => drawersApi?.closeInstant(),
   });
 
+  // The AI helpers (opt-in). Nothing is looked for or started unless they are turned on in Settings.
+  aiApi = initAi({
+    toast,
+    openChat: openAiTab,
+    typeText,
+    getFolder: async () => {
+      const tab = tabs.find((t) => t.id === lastTermId);
+      return tab ? (await cwdOf(tab)) || null : null;
+    },
+  });
+  if (aiApi.enabled()) aiApi.detect();
+  document.getElementById("open-ai").addEventListener("click", () => aiApi.startChat());
+
   drawersApi = initDrawers({
     toast,
     focusTerminal: focusActive,
     panesEl,
     dragger,
+    onExplain: (cmd) => aiApi?.explain(cmd),
   });
   initContextMenu({
     panesEl,

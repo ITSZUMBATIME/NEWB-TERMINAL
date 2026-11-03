@@ -2,6 +2,7 @@
 // Its job: start a real shell (bash, zsh...) for each tab, pass the keys you type
 // into it, and pass everything the shell prints back to the window.
 
+mod ai;
 mod fonts;
 mod fsinfo;
 mod repo;
@@ -59,6 +60,9 @@ fn pty_spawn(
     id: u32,
     cols: u16,
     rows: u16,
+    tool: Option<String>,
+    args: Option<Vec<String>>,
+    cwd: Option<String>,
 ) -> Result<(), String> {
     let pair = native_pty_system()
         .openpty(PtySize {
@@ -69,12 +73,26 @@ fn pty_spawn(
         })
         .map_err(|e| e.to_string())?;
 
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
-    let mut cmd = CommandBuilder::new(shell);
+    // Normally a shell. For the AI chat it is one of the known AI tools (never anything else),
+    // started in the folder you were in, with the flags for the level you chose.
+    let mut cmd = match tool.as_deref() {
+        Some(t) => {
+            let path = ai::find_tool(t).ok_or_else(|| format!("{t} isn't installed"))?;
+            let mut c = CommandBuilder::new(path);
+            c.args(args.unwrap_or_default());
+            c
+        }
+        None => CommandBuilder::new(std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())),
+    };
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
-    if let Ok(home) = std::env::var("HOME") {
-        cmd.cwd(home);
+    match cwd.filter(|d| std::path::Path::new(d).is_dir()) {
+        Some(dir) => cmd.cwd(dir),
+        None => {
+            if let Ok(home) = std::env::var("HOME") {
+                cmd.cwd(home);
+            }
+        }
     }
 
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
@@ -225,6 +243,7 @@ fn quit_app(app: AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
+        .manage(ai::AskState::default())
         .invoke_handler(tauri::generate_handler![
             pty_spawn,
             pty_write,
@@ -233,6 +252,9 @@ pub fn run() {
             quit_app,
             pty_cwd,
             pty_busy,
+            ai::ai_detect,
+            ai::ai_ask,
+            ai::ai_cancel,
             fsinfo::list_dir,
             fsinfo::home_dir,
             repo::read_text_file,

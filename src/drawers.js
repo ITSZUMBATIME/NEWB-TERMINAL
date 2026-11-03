@@ -80,7 +80,7 @@ function queryWords(text) {
  * options: { toast(msg), focusTerminal(), panesEl, dragger }
  * returns { toggle(tab), open(tab), close(), closeInstant(), isOpen(), addFav(cmd), addToCategory(id, cmd) }
  */
-export function initDrawers({ toast, focusTerminal, panesEl, dragger }) {
+export function initDrawers({ toast, focusTerminal, panesEl, dragger, onExplain }) {
   const drawer = document.getElementById("drawer-cheats");
   const buttons = { tree: document.getElementById("open-cheats"), keys: document.getElementById("open-keys") };
   const panels = { tree: document.getElementById("panel-tree"), keys: document.getElementById("panel-keys") };
@@ -248,6 +248,8 @@ export function initDrawers({ toast, focusTerminal, panesEl, dragger }) {
         iconButton("trash", "Delete this command", "mini-act", () => deleteMine(opts.mine.cat, opts.mine.item)),
       );
     }
+    // Only shows when the AI helpers are turned on (see the CSS): what each part of this command does.
+    line.append(iconButton("spark", "Explain this command in plain English", "mini-act ai-only", () => onExplain?.(item.cmd)));
     if (opts.removable) line.append(iconButton("close", "Remove from favourites", "unpin", () => toggleFav(item.cmd)));
     else line.append(starButton(item.cmd));
 

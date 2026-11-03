@@ -15,6 +15,10 @@ export const DEFAULT_PREFS = {
   showSearch: true,
   logoText: "AKIN", // what the welcome logo says
   logoFont: "vortex", // vortex | metal-mania | mono | file:<name of a font in the fonts folder>
+  aiOn: false, // the AI helpers are opt-in: off until you turn them on
+  aiTool: "", // claude | codex ("" = the first one found)
+  aiLevel: "ask", // see ailevels.js
+  aiSudo: false, // allow the AI to use sudo
 };
 
 let state = { ...DEFAULT_PREFS };
@@ -30,6 +34,7 @@ function applyToPage() {
   root.dataset.lineNumbers = state.lineNumbers ? "1" : "0";
   root.dataset.showRepos = state.showRepos ? "1" : "0";
   root.dataset.showSearch = state.showSearch ? "1" : "0";
+  root.dataset.ai = state.aiOn ? "1" : "0";
 }
 applyToPage();
 

@@ -120,6 +120,7 @@ export function initThemePicker({ toast, focusBack }) {
 
     draw();
     input.focus();
+    setTimeout(() => input.focus(), 0); // the terminal may try to take the keyboard back a moment later
   }
 
   return { open, isOpen: () => Boolean(overlay) };

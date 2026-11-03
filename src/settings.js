@@ -1,9 +1,10 @@
 // The Settings tab (Ctrl+,). A list of sections on the left, a search box on top, and the
 // settings themselves in one scrolling page. Changes apply straight away and are remembered.
 
-import { el, askChoice } from "./ui.js";
+import { el, askChoice, askText } from "./ui.js";
 import { prefs } from "./prefs.js";
 import { icon } from "./icons.js";
+import { TOOL_NAMES, LEVELS, levelsFor, usableLevel, commandPreview } from "./ailevels.js";
 import { THEMES, currentTheme, customThemes, onThemeChange, onThemesListChange, setTheme, setSync, themeState } from "./themes.js";
 
 // A row of buttons where one is chosen.
@@ -35,10 +36,10 @@ function toggle(on, onChange) {
 }
 
 /**
- * options: { host, display, toast, welcome, projects, version, themes, logo, showThemesFolder(), showFontsFolder() }
+ * options: { host, display, toast, welcome, projects, version, themes, logo, ai, openAiChat(), showThemesFolder(), showFontsFolder() }
  * returns { show(sectionId), focus(), destroy() }
  */
-export function createSettingsView({ host, display, toast, welcome, projects, version, themes, logo, showThemesFolder, showFontsFolder }) {
+export function createSettingsView({ host, display, toast, welcome, projects, version, themes, logo, ai, openAiChat, showThemesFolder, showFontsFolder }) {
   const rows = []; // { section, el, text } for searching
   const sections = []; // { id, title, el, navEl }
 
@@ -355,6 +356,126 @@ export function createSettingsView({ host, display, toast, welcome, projects, ve
   const showSearch = toggle(prefs.get("showSearch"), (v) => prefs.set("showSearch", v));
   row(panels, "Show the Search tab", "Finds text inside your projects (Ctrl+Shift+F).", showSearch.el, "search find tab");
 
+  /* ---------- AI helpers ---------- */
+
+  let showAi = () => {};
+  let unsubscribeAi = null;
+  if (ai) {
+    const sec = section("ai", "AI helpers");
+    const aiRows = []; // everything below the main switch hides while the AI is off
+
+    const on = toggle(prefs.get("aiOn"), (v) => {
+      prefs.set("aiOn", v);
+      if (v) ai.detect();
+    });
+    row(sec, "Turn on the AI helpers", "Off keeps NEWB a plain terminal. On adds an Ask bar (Ctrl+Space), an AI chat beside your terminal (Ctrl+Shift+A) and an Explain button on cheat-sheet commands. NEWB has no AI of its own and keeps no keys: it uses Claude Code or Codex, which you install and sign in to yourself.", on.el, "ai artificial intelligence claude codex assistant helpers chat ask explain opt in");
+
+    // Which tool
+    const toolSel = el("select", "st-select");
+    const lookBtn = el("button", "st-btn", "Look again");
+    lookBtn.type = "button";
+    const toolBox = el("div", "st-pair");
+    toolBox.append(toolSel, lookBtn);
+    const toolRow = row(sec, "Which AI tool", "", toolBox, "ai tool claude codex install");
+    const toolHint = toolRow.querySelector(".st-hint") || toolRow.querySelector(".st-text").appendChild(el("div", "st-hint"));
+    aiRows.push(toolRow);
+    lookBtn.addEventListener("click", async () => {
+      toolHint.textContent = "Looking…";
+      await ai.detect();
+    });
+    toolSel.addEventListener("change", () => prefs.set("aiTool", toolSel.value));
+
+    // How much it may do
+    const levelSel = el("select", "st-select");
+    const levelRow = row(sec, "How much it can do", "", levelSel, "ai level permission safety plan ask edit auto sudoless advanced");
+    const levelHint = levelRow.querySelector(".st-hint") || levelRow.querySelector(".st-text").appendChild(el("div", "st-hint"));
+    aiRows.push(levelRow);
+    let shownLevel = null;
+    levelSel.addEventListener("change", async () => {
+      const wanted = levelSel.value;
+      const info = LEVELS.find((l) => l.id === wanted);
+      if (info?.danger) {
+        const typed = await askText({
+          title: "Turn off all the safety checks?",
+          message: "Sudoless means the AI never asks first and has no safety net. It can change or delete anything your user can, and a mistake can't be undone. Use it in a spare folder or a virtual machine. It still never runs as root. Type SUDOLESS to turn it on.",
+          okLabel: "Turn it on",
+        });
+        if (!typed || typed.trim().toUpperCase() !== "SUDOLESS") {
+          levelSel.value = shownLevel;
+          toast("Left as it was.", 2000);
+          return;
+        }
+      }
+      prefs.set("aiLevel", wanted);
+    });
+
+    // sudo
+    const sudo = toggle(prefs.get("aiSudo"), (v) => prefs.set("aiSudo", v));
+    const sudoRow = row(sec, "Allow the AI to use sudo", "", sudo.el, "ai sudo root administrator");
+    const sudoHint = sudoRow.querySelector(".st-hint") || sudoRow.querySelector(".st-text").appendChild(el("div", "st-hint"));
+    aiRows.push(sudoRow);
+
+    // what NEWB runs
+    const preview = el("code", "st-code");
+    const previewRow = row(sec, "How NEWB starts it", "This is the exact command, so nothing is hidden. NEWB passes your level every time.", preview, "ai command flags");
+    aiRows.push(previewRow);
+
+    const chatBtn = el("button", "st-btn", "Open the AI chat");
+    chatBtn.type = "button";
+    chatBtn.addEventListener("click", () => openAiChat?.());
+    aiRows.push(row(sec, "Try it", "Starts the AI in a tab beside your terminal, in the folder your terminal is in. The first time, it will ask you to sign in.", chatBtn, "ai chat open start"));
+
+    showAi = function () {
+      const enabled = prefs.get("aiOn");
+      on.set(enabled);
+      for (const r of aiRows) r.classList.toggle("ai-hidden", !enabled);
+      const tools = ai.tools();
+      const current = ai.tool();
+      toolSel.replaceChildren(
+        ...tools.map((t) => {
+          const o = el("option", "", TOOL_NAMES[t.id] || t.name);
+          o.value = t.id;
+          return o;
+        }),
+      );
+      if (current) toolSel.value = current.id;
+      toolSel.disabled = !tools.length;
+      toolHint.textContent = !ai.loaded()
+        ? "Looking for Claude Code and Codex…"
+        : current
+          ? `${current.version || TOOL_NAMES[current.id]} · ${current.path.replace(/^\/root\//, "~/")}`
+          : "Neither Claude Code nor Codex was found. Install one and run it once in a terminal to sign in, then press Look again.";
+
+      const toolId = current ? current.id : "claude";
+      const lvl = usableLevel(toolId, prefs.get("aiLevel"));
+      shownLevel = lvl;
+      const normal = levelsFor(toolId).filter((l) => !l.advanced);
+      const advanced = levelsFor(toolId).filter((l) => l.advanced);
+      const opt = (l) => {
+        const o = el("option", "", l.label);
+        o.value = l.id;
+        return o;
+      };
+      const group = el("optgroup");
+      group.label = "Advanced";
+      group.append(...advanced.map(opt));
+      levelSel.replaceChildren(...normal.map(opt), group);
+      levelSel.value = lvl;
+      const info = LEVELS.find((l) => l.id === lvl);
+      const missing = prefs.get("aiLevel") !== lvl ? ` (${TOOL_NAMES[toolId]} has no "${LEVELS.find((l) => l.id === prefs.get("aiLevel"))?.label}" level, so this uses Ask first.)` : "";
+      levelHint.textContent = `${info.hint}${missing}`;
+      levelHint.classList.toggle("warn", Boolean(info.danger));
+
+      sudo.set(prefs.get("aiSudo"));
+      sudoHint.textContent = toolId === "claude"
+        ? "Off: NEWB tells Claude Code never to use sudo. On: it may ask to, and you approve each time unless the level is Sudoless."
+        : "Codex has no switch to block sudo, so this only matters for what you allow it to run. Keep the level at Ask first or lower if you want to approve each command.";
+      preview.textContent = commandPreview(toolId, lvl, prefs.get("aiSudo"));
+    };
+    unsubscribeAi = ai.subscribe(showAi);
+    showAi();
+  }
+
   /* ---------- Welcome screen ---------- */
 
   const hello = section("welcome", "Welcome screen");
@@ -451,6 +572,7 @@ export function createSettingsView({ host, display, toast, welcome, projects, ve
     layoutSeg.set(welcome.layout());
     logoSeg.set(welcome.logo());
     showLogoFonts();
+    showAi();
   }
   refresh();
   onThemeChange(refresh);
@@ -490,6 +612,7 @@ export function createSettingsView({ host, display, toast, welcome, projects, ve
       resizer.disconnect();
       unsubscribeThemes();
       unsubscribeLogo?.();
+      unsubscribeAi?.();
       unsubscribe();
       unsubscribePrefs();
       unsubscribeWelcome();
