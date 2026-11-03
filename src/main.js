@@ -2,6 +2,7 @@
 // Shows a terminal (xterm.js) for each tab and connects it to a real shell
 // that the Rust side runs. Also draws the logo and the system info.
 
+import "./migrate.js"; // first: carries old saved settings over to their new names
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -81,7 +82,7 @@ function setLogo(i, announce) {
   const logo = LOGOS[logoIndex];
   heroEl.dataset.logo = logo.id;
   asciiLogo.setStyle(logo.id);
-  saveSetting("akin.logo.v2", logo.id);
+  saveSetting("newb.logo.v2", logo.id);
   welcomeListeners.forEach((fn) => fn());
   if (announce) toast(`Logo: ${logo.name}.`, 2000);
 }
@@ -133,7 +134,7 @@ function setLayout(i, announce) {
   layoutIndex = (i + LAYOUTS.length) % LAYOUTS.length;
   const layout = LAYOUTS[layoutIndex];
   heroEl.dataset.layout = layout.id;
-  saveSetting("akin.layout.v4", layout.id);
+  saveSetting("newb.layout.v4", layout.id);
   welcomeListeners.forEach((fn) => fn());
   if (announce) toast(`Welcome screen: ${layout.name}, ${layout.hint}`, 4500);
 }
@@ -415,7 +416,7 @@ function layoutPanes() {
 
 function toggleSplit() {
   splitOn = !splitOn;
-  saveSetting("akin.split.v1", splitOn ? "1" : "0");
+  saveSetting("newb.split.v1", splitOn ? "1" : "0");
   splitBtn.classList.toggle("active", splitOn);
   if (splitOn && !tabs.some((t) => !isTerm(t))) toast("Open a file and it will show beside the terminal.", 3500);
   layoutPanes();
@@ -1125,8 +1126,8 @@ async function start() {
   newTabBtn.addEventListener("click", newTab);
 
   // Editor beside terminal: the button, the remembered setting, and the draggable divider.
-  splitOn = loadSetting("akin.split.v1") === "1";
-  splitRatio = Math.min(0.8, Math.max(0.2, parseFloat(loadSetting("akin.split.ratio")) || 0.5));
+  splitOn = loadSetting("newb.split.v1") === "1";
+  splitRatio = Math.min(0.8, Math.max(0.2, parseFloat(loadSetting("newb.split.ratio")) || 0.5));
   panesEl.style.setProperty("--split", `${splitRatio * 100}%`);
   splitBtn.classList.toggle("active", splitOn);
   splitBtn.addEventListener("click", toggleSplit);
@@ -1145,7 +1146,7 @@ async function start() {
       splitHandle.removeEventListener("pointermove", move);
       splitHandle.removeEventListener("pointerup", up);
       document.body.classList.remove("resizing");
-      saveSetting("akin.split.ratio", String(splitRatio));
+      saveSetting("newb.split.ratio", String(splitRatio));
     };
     splitHandle.addEventListener("pointermove", move);
     splitHandle.addEventListener("pointerup", up);
@@ -1159,9 +1160,9 @@ async function start() {
 
   mountIcons(); // fill in the little pictures on the buttons
 
-  const savedLogo = LOGOS.findIndex((l) => l.id === loadSetting("akin.logo.v2"));
+  const savedLogo = LOGOS.findIndex((l) => l.id === loadSetting("newb.logo.v2"));
   setLogo(savedLogo === -1 ? 0 : savedLogo, false);
-  const savedLayout = LAYOUTS.findIndex((l) => l.id === loadSetting("akin.layout.v4"));
+  const savedLayout = LAYOUTS.findIndex((l) => l.id === loadSetting("newb.layout.v4"));
   setLayout(savedLayout === -1 ? 0 : savedLayout, false);
 
   new ResizeObserver(() => {

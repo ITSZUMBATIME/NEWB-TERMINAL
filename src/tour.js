@@ -6,7 +6,7 @@
 
 import { el } from "./ui.js";
 
-const SEEN_KEY = "akin.tour.v1";
+const SEEN_KEY = "newb.tour.v1";
 
 // Each step points at something on the screen (a CSS selector) or, with no target, sits in the middle.
 const STEPS = [
@@ -174,7 +174,7 @@ export function initTour({ prepare } = {}) {
     if (seen()) return;
     let returning = false;
     try {
-      returning = ["akin.display.v1", "akin.theme.v1", "akin.prefs.v1", "akin.custom.v1", "akin.layout.v4"].some((k) => localStorage.getItem(k));
+      returning = ["newb.display.v1", "newb.theme.v1", "newb.prefs.v1", "newb.custom.v1", "newb.layout.v4"].some((k) => localStorage.getItem(k));
     } catch (_) { /* treat as new */ }
     if (returning) {
       markSeen(); // an existing user is not interrupted; the tour is one click away

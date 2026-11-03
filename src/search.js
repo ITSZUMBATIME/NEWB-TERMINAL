@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { el } from "./ui.js";
 import { fileIcon } from "./icons.js";
 
-const KEY = "akin.search.v1";
+const KEY = "newb.search.v1";
 
 function loadOptions() {
   try {

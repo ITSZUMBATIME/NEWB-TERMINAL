@@ -11,10 +11,10 @@ import { TREE, ESSENTIALS, SHORTCUTS, lookup, lookupTree, hintsFor, flattenTree 
 import { el, cmdElement, askChoice, miniForm } from "./ui.js";
 import { icon, groupIconName } from "./icons.js";
 
-const FAV_KEY = "akin.favs.v1";
-const OPEN_KEY = "akin.tree.v1";
-const TAB_KEY = "akin.rtab.v2";
-const CUSTOM_KEY = "akin.custom.v1";
+const FAV_KEY = "newb.favs.v1";
+const OPEN_KEY = "newb.tree.v1";
+const TAB_KEY = "newb.rtab.v2";
+const CUSTOM_KEY = "newb.custom.v1";
 const FAV_ID = "Favourites";
 const MINE_ID = "My categories";
 

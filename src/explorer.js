@@ -11,7 +11,7 @@ import { initRepos } from "./repos.js";
 import { initSearch } from "./search.js";
 import { prefs } from "./prefs.js";
 
-const KEY = "akin.explorer.v1";
+const KEY = "newb.explorer.v1";
 const MIN_W = 190;
 const MAX_W = 560;
 

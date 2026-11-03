@@ -160,8 +160,8 @@ function terminalColours(theme) {
 
 /* ---------- Choosing and applying ---------- */
 
-const KEY = "akin.theme.v1";
-const CUSTOM_KEY = "akin.theme.custom.v1"; // the last list of your own themes, so they are there from the first frame
+const KEY = "newb.theme.v1";
+const CUSTOM_KEY = "newb.theme.custom.v1"; // the last list of your own themes, so they are there from the first frame
 const DEFAULT_ID = "newb-dark";
 let custom = []; // your own themes (from the themes folder), see customthemes.js
 const byId = (id) => THEMES.find((x) => x.id === id) || custom.find((x) => x.id === id) || THEMES[0];

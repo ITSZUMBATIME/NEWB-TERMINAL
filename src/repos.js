@@ -6,7 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { el, miniForm, shellQuote } from "./ui.js";
 import { icon } from "./icons.js";
 
-const KEY = "akin.repos.v1";
+const KEY = "newb.repos.v1";
 const WORD = { M: "Changed", A: "Added", U: "New file", D: "Deleted", R: "Renamed", "!": "Conflict" };
 
 function loadConfig(home) {

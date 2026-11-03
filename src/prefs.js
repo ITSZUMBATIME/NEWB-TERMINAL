@@ -2,7 +2,7 @@
 // which side tabs to show. Kept in one place so the Settings page, the terminal, the editor and
 // the left panel can all read them and be told when they change.
 
-const KEY = "akin.prefs.v1";
+const KEY = "newb.prefs.v1";
 
 export const DEFAULT_PREFS = {
   cursorStyle: "block", // block | bar | underline

@@ -12,7 +12,7 @@
 
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 
-const KEY = "akin.display.v1";
+const KEY = "newb.display.v1";
 const DEFAULTS = { scale: 1, font: 14, panels: "classic", editor: "friendly" };
 const SCALE_MIN = 0.6;
 const SCALE_MAX = 3;
@@ -125,8 +125,8 @@ export function initDisplay({ onFontChange, onEditorChange, toast }) {
   // First time on a very large screen? Say how to make things bigger.
   try {
     const bigScreen = window.screen.width >= 3440 || window.screen.height >= 1600;
-    if (bigScreen && state.scale === 1 && !localStorage.getItem("akin.sizehint")) {
-      localStorage.setItem("akin.sizehint", "1");
+    if (bigScreen && state.scale === 1 && !localStorage.getItem("newb.sizehint")) {
+      localStorage.setItem("newb.sizehint", "1");
       setTimeout(() => toast("Big screen? Press Ctrl and + to make everything bigger, or open Settings with the cog at the top right."), 2500);
     }
   } catch (_) { /* fine */ }

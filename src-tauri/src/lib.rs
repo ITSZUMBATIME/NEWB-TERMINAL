@@ -239,8 +239,40 @@ fn quit_app(app: AppHandle) {
     app.exit(0);
 }
 
+/// NEWB used to be called something else internally ("dev.akin.terminal"), and its saved settings
+/// (favourites, categories, theme...) live in a folder named after that. When the name changed, the
+/// folder would have been left behind, so copy it across once, before anything is opened.
+fn move_old_saved_settings() {
+    const OLD: &str = "dev.akin.terminal";
+    const NEW: &str = "io.github.itszumbatime.newb";
+    let base = std::env::var_os("XDG_DATA_HOME")
+        .map(std::path::PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share")));
+    let Some(base) = base else { return };
+    let (old, new) = (base.join(OLD), base.join(NEW));
+    if old.is_dir() && !new.exists() {
+        let _ = copy_folder(&old, &new);
+    }
+}
+
+fn copy_folder(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)?.flatten() {
+        let kind = entry.file_type()?;
+        let target = to.join(entry.file_name());
+        if kind.is_dir() {
+            copy_folder(&entry.path(), &target)?;
+        } else if kind.is_file() {
+            std::fs::copy(entry.path(), target)?;
+        } // links are skipped
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    move_old_saved_settings();
     tauri::Builder::default()
         .manage(AppState::default())
         .manage(ai::AskState::default())

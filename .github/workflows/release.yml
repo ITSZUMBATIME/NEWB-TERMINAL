@@ -1,0 +1,52 @@
+# Builds NEWB for Linux (an AppImage, a .deb and a .rpm) and attaches them to a draft GitHub release.
+#
+# To make a release:   git tag v0.2.0 && git push origin v0.2.0
+# (or run it by hand from the Actions tab). Then open the draft release on GitHub and press Publish.
+#
+# It builds on Ubuntu 22.04 on purpose: an AppImage made on an older system also runs on newer ones
+# (like Fedora), but not the other way round.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the system packages NEWB is built with
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "NEWB ${{ github.ref_name }}"
+          releaseBody: "Download the AppImage (runs anywhere: make it executable and double-click), the .rpm (Fedora) or the .deb (Debian, Ubuntu)."
+          releaseDraft: true
+          prerelease: false
